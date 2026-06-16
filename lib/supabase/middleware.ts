@@ -38,7 +38,12 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: avoid running code between createServerClient and getUser; it
   // refreshes the auth token and writes the updated session cookies.
-  await supabase.auth.getUser();
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // Network errors or malformed tokens must not crash the proxy and block
+    // all requests — the session simply won't be refreshed for this request.
+  }
 
   // TODO (step 3 — auth): redirect unauthenticated users to /signin here.
 
