@@ -1,0 +1,51 @@
+# Penn Free Food
+
+## What this is
+Penn Free Food is a web app where University of Pennsylvania students post about leftover/free food on campus so other students can grab it before it's thrown out. It replaces a large, unstructured group chat: the wedge is **trustworthy live availability** — you should be able to believe the app when it says food is still there — achieved via crowd-sourced status updates rather than relying on the original poster. A post carries a required photo, a location (feed + map), servings remaining, and dietary/allergen tags; an AI vision classifier pre-fills those fields from the photo to keep posting under a ~15-second friction budget. `@upenn.edu`-gated, for tens to low hundreds of users on one campus. Currently pre-code / web MVP phase; native app deferred until validated.
+
+## Stack
+- **Framework:** Next.js (App Router), React, TypeScript (strict)
+- **Validation:** Zod — shared between AI tool outputs and DB-facing types
+- **Database / auth / storage / realtime:** Supabase (Postgres + PostGIS + RLS, Supabase Auth, Supabase Storage, Supabase Realtime)
+- **Styling/UI:** Tailwind CSS + shadcn/ui + Lucide icons (shadcn defaults)
+- **Map:** MapLibre GL JS (free/open) — tile provider TBD
+- **AI:** OpenRouter (vision model) for the food-photo classifier — server-side only
+- **Hosting:** Vercel + Supabase cloud
+
+## Commands
+<!-- Fill in once package.json scripts exist. Expected: -->
+```
+npm run dev       # start dev server
+npm run build     # production build
+npm run lint      # ESLint
+npx tsc --noEmit  # typecheck
+```
+
+## Project structure
+<!-- Fill in once folders exist. -->
+
+## Conventions
+- Match existing code style
+- Server actions for all mutations
+- Ask before adding dependencies
+- Keep prd.md updated with general build progress and progress.md updated with implementation details
+
+## Supabase keys (non-negotiable)
+- New publishable + secret keys, not legacy `anon` / `service_role`.
+- Client uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` only; `SUPABASE_SECRET_KEY` is server-only and never `NEXT_PUBLIC_`-prefixed.
+
+## Security non-negotiables
+- `@upenn.edu` gate enforced server-side at the auth boundary; client checks are cosmetic.
+- Supabase secret key and OpenRouter key never reach the client — all AI calls and secret-key DB ops are server-side.
+- RLS on every table, default-deny.
+- AI dietary/allergen tags are never authoritative — always AI-suggested + user-confirmed.
+
+## Secrets
+- Never read .env.local or any .env.* file with real values.
+- Refer to .env.example for required environment variables.
+- If you need an env var's value, ask me.
+
+## Definition of done
+- Typecheck passes
+- Tests pass
+- Lint passes
