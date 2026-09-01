@@ -32,4 +32,40 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - The Nav "Post food" button links to `/post/new`, which doesn't exist yet (404 until step 4).
 
 **Next**
-- Step 2: schema + RLS migrations for all tables in PRD §7, seed test profiles (incl. one admin).
+- Step 3: auth & onboarding — email OTP with server-side `@upenn.edu` enforcement, long-lived sessions, route protection, sign-in page.
+
+---
+
+## Step 2 — Schema & RLS (done)
+
+**What was built**
+- `supabase/migrations/0002_schema.sql` — all 7 tables from PRD §7:
+  - `profiles` (= auth user, with `role` check constraint: `student | admin`)
+  - `posts` (PostGIS `geography(Point, 4326)` for location + GiST index; status + last_activity_at indexes)
+  - `comments`
+  - `availability_events` (partial unique index: one `gone_report` per user per post, per PRD §6.1)
+  - `notification_preferences`
+  - `push_subscriptions`
+  - `notifications`
+- Two DB-level triggers enforcing business rules that RLS alone can't express:
+  - `prevent_role_change` on `profiles` — non-admin users cannot elevate their own `role`; admin-client calls (null `auth.uid()`) are allowed through.
+  - `check_post_update_permissions` on `posts` — only the creator may change `description`, `photo_path`, or `bumped_at`; any student may update crowd-sourced fields; admin-client calls allowed through.
+- `handle_new_user` trigger on `auth.users` — auto-creates a `profiles` row on signup.
+- `supabase/migrations/0003_rls.sql` — RLS enabled on all tables (default-deny). Policies per PRD §8:
+  - `profiles`: authenticated read-all; own insert/update (role change blocked by trigger).
+  - `posts`: authenticated read-all; authenticated insert (as self); authenticated update-all (field guard in trigger); creator-only delete (admin deletes use admin client, bypassing RLS).
+  - `comments`: authenticated read/insert; author-only delete.
+  - `availability_events`: authenticated read/insert; no update or delete (append-only log).
+  - `notification_preferences`, `push_subscriptions`, `notifications`: own-row read/write only. `notifications` has no user INSERT policy — rows are created server-side via the admin client.
+- `supabase/seed.sql` — two test users (`student@upenn.edu`, `admin@upenn.edu`) with the admin role set directly in the DB. Local-dev: insert via `supabase db reset`; remote: create via Supabase dashboard then apply the UPDATE statements.
+
+**Verification**
+- SQL reviewed for correctness; no Next.js build changes in this step (pure DB migration).
+- Migrations `0002` and `0003` applied against the live Supabase project (via the dashboard SQL editor) with no errors.
+- Verified over the REST API with the publishable key that all 7 tables exist and return no rows to an unauthenticated caller. Note: an empty table returns `[]` regardless of RLS, so this confirms existence, not enforcement — RLS is genuinely exercised once step 3 provides a real session.
+
+**Decisions / deviations**
+- Field-level write restrictions on `posts` are enforced via a `BEFORE UPDATE` trigger rather than separate RLS policies, because Postgres RLS operates at row granularity, not column granularity.
+- `notifications` intentionally has no user-INSERT RLS policy — only the server-side admin client inserts notification rows (when posts/comments are created). This avoids user-forgeable notifications.
+- The partial unique index on `availability_events` (`where type = 'gone_report'`) satisfies PRD §6.1's "one user's gone_report per post counts once" at the DB level, allowing multiple `servings_update` events per user per post.
+- Admin-client operations (`auth.uid() IS NULL`) are explicitly allowed through both triggers; attempting DB-level enforcement using admin identity would require a separate role, which is unnecessary complexity for this MVP scale.
