@@ -69,3 +69,31 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - `notifications` intentionally has no user-INSERT RLS policy — only the server-side admin client inserts notification rows (when posts/comments are created). This avoids user-forgeable notifications.
 - The partial unique index on `availability_events` (`where type = 'gone_report'`) satisfies PRD §6.1's "one user's gone_report per post counts once" at the DB level, allowing multiple `servings_update` events per user per post.
 - Admin-client operations (`auth.uid() IS NULL`) are explicitly allowed through both triggers; attempting DB-level enforcement using admin identity would require a separate role, which is unnecessary complexity for this MVP scale.
+
+---
+
+## Step 3 — Auth & onboarding (in progress)
+
+### 3a — `@upenn.edu` auth hook (done)
+
+**What was built**
+- `supabase/migrations/0004_auth_hook.sql`:
+  - `hook_restrict_signup_by_email_domain(event jsonb)` — a Supabase **Before User Created** hook enforcing the Penn domain gate. Accepts `upenn.edu` and any subdomain (`engineering.upenn.edu`, `sas.upenn.edu`, `wharton.upenn.edu`, …); denies everything else, including emailless (phone/anonymous) signups. `execute` granted to `supabase_auth_admin` only, revoked from `anon`/`authenticated`/`public`.
+  - `handle_new_user` updated to default `display_name` to the email local-part, per PRD §11's low-friction lean. Living in the trigger means a future iOS client inherits it for free.
+- `supabase/seed.sql` reworked (see gotcha below).
+
+**Verification**
+- Deny path: raw `POST /auth/v1/otp` with the publishable key for an `example.com` address → `403` with the custom message, no user created. This bypasses all app code, which is the point of enforcing at the auth boundary rather than in a server action.
+- Allow path: same call for `santos7@engineering.upenn.edu` → `200`; user created, visible to the Auth admin API, with a `profiles` row auto-created by the trigger and `display_name` = `santos7`, `role` = `student`.
+
+**Decisions / deviations**
+- Subdomain wildcard (`%.upenn.edu`) rather than an explicit school list: Penn issues addresses under more subdomains than are worth tracking, only Penn controls DNS under `upenn.edu`, and the `LIKE` is end-anchored so `upenn.edu.attacker.com` does not match. This widens the PRD's literal `@upenn.edu` wording — confirmed with the product owner.
+- The hook is a Postgres function, not an Edge Function: no extra deploy surface, and the Before User Created hook supports both.
+
+**Known issues / gotchas**
+- ⚠️ **Never hand-write `auth.users` rows on a remote project.** The original seed inserted rows without `instance_id`; Postgres accepted them, but GoTrue filters on `instance_id`, so the users were invisible to the Auth admin API and could not have signed in. Symptom: `profiles` has rows (FK-valid) while `/auth/v1/admin/users` returns `[]`. Fix was to delete them and let Supabase create users properly. `seed.sql` now sets `instance_id` + empty-string token columns for local use, and its remote path is an email-matched `UPDATE` only.
+- Auth Hooks is marked BETA in the Supabase dashboard.
+- Email auto-confirm appears to be enabled on the project (`email_confirmed_at` set at creation). Harmless for the gate — a session still requires OTP verification — but relevant to 3b.
+
+**Next**
+- 3b: `/signin` page + `app/actions/auth.ts` (send/verify OTP, sign out).

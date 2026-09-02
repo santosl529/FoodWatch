@@ -6,19 +6,28 @@
 --   psql "$DATABASE_URL" -f supabase/seed.sql
 --
 -- REMOTE / STAGING:
---   Create users through the Supabase dashboard (Authentication → Users)
---   using the emails below. The handle_new_user trigger will auto-create
---   their profile rows. Then run only the UPDATE statements at the bottom
---   to set the admin role and display names.
+--   Run ONLY the UPDATE at the bottom of this file. Create the users first via
+--   the dashboard (Authentication → Users) or by signing in through the app;
+--   the handle_new_user trigger creates their profile rows automatically.
 
--- Insert test auth users directly (local dev only — direct auth.users writes
--- are not possible on remote Supabase; use the dashboard or Admin API there).
+-- ⚠️ LOCAL DEV ONLY — DO NOT RUN THIS INSERT AGAINST A REMOTE PROJECT.
+-- Hand-written auth.users rows are accepted by Postgres but are not valid
+-- GoTrue users: without instance_id, and with NULL token columns, they are
+-- invisible to the Auth admin API and cannot sign in. We hit exactly this on
+-- the remote project and had to delete the rows again. instance_id and the
+-- token columns are set explicitly below because GoTrue filters on the former
+-- and fails to scan NULLs into strings for the latter.
 insert into auth.users (
   id,
+  instance_id,
   email,
   email_confirmed_at,
   created_at,
   updated_at,
+  confirmation_token,
+  recovery_token,
+  email_change,
+  email_change_token_new,
   raw_app_meta_data,
   raw_user_meta_data,
   aud,
@@ -26,8 +35,10 @@ insert into auth.users (
 ) values
   (
     '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000000',
     'student@upenn.edu',
     now(), now(), now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}',
     '{"display_name":"Test Student"}',
     'authenticated',
@@ -35,8 +46,10 @@ insert into auth.users (
   ),
   (
     '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000000',
     'admin@upenn.edu',
     now(), now(), now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}',
     '{"display_name":"Admin"}',
     'authenticated',
@@ -44,13 +57,21 @@ insert into auth.users (
   )
 on conflict (id) do nothing;
 
--- The handle_new_user trigger creates profile rows on auth.users insert.
--- Set display names and promote the admin user.
--- Use ON CONFLICT in case seed is re-run after a partial run.
-insert into public.profiles (id, email, display_name, role)
-values
-  ('00000000-0000-0000-0000-000000000001', 'student@upenn.edu', 'Test Student', 'student'),
-  ('00000000-0000-0000-0000-000000000002', 'admin@upenn.edu',   'Admin',        'admin')
-on conflict (id) do update
-  set display_name = excluded.display_name,
-      role         = excluded.role;
+-- The handle_new_user trigger creates profile rows on auth.users insert, with
+-- display_name defaulting to the email local-part (see 0004_auth_hook.sql).
+-- This statement overrides those defaults and promotes the admin user.
+--
+-- ON REMOTE, THIS IS THE ONLY STATEMENT YOU SHOULD RUN — and only after the
+-- users exist. Match on email rather than a hardcoded id, since dashboard- and
+-- app-created users get random uuids.
+update public.profiles
+   set display_name = case email
+         when 'student@upenn.edu' then 'Test Student'
+         when 'admin@upenn.edu'   then 'Admin'
+         else display_name
+       end,
+       role = case email
+         when 'admin@upenn.edu' then 'admin'
+         else role
+       end
+ where email in ('student@upenn.edu', 'admin@upenn.edu');
