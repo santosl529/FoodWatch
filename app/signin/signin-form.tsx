@@ -4,11 +4,7 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowLeft, Loader2, MailCheck } from "lucide-react";
 
-import {
-  initialSignInState,
-  sendOtp,
-  verifyOtp,
-} from "@/app/actions/auth";
+import { sendOtp, verifyOtp } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isPennEmail } from "@/lib/auth/penn-email";
+import { initialSignInState } from "@/lib/auth/sign-in-state";
 
 function SubmitButton({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();

@@ -4,20 +4,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { PENN_EMAIL_PATTERN } from "@/lib/auth/penn-email";
+import type { SignInState } from "@/lib/auth/sign-in-state";
 import { createClient } from "@/lib/supabase/server";
 
-/**
- * Shared state for both sign-in steps, shaped for `useActionState`.
- *
- * `sentTo` doubles as the step indicator: once a code has been sent, the form
- * switches from the email field to the code field.
- */
-export type SignInState = {
-  error: string | null;
-  sentTo: string | null;
-};
-
-export const initialSignInState: SignInState = { error: null, sentTo: null };
+// NOTE: this module is "use server" — it may only export async functions.
+// `SignInState` and `initialSignInState` therefore live in
+// `lib/auth/sign-in-state.ts`; a value export here is a runtime error.
 
 const emailField = z
   .string()

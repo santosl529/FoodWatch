@@ -110,6 +110,7 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 **Verification**
 - `npm run typecheck`, `npm run lint`, `npm run build` all pass. `/signin` builds as a dynamic route.
 - Dev-server smoke test: `GET /signin` returns 200 and renders the expected fields.
+- Follow-up fix: `app/actions/auth.ts` initially exported `initialSignInState`, which a `"use server"` module may not do (async functions only). It surfaced only when the page was actually requested in dev — `npm run build` passed and an early smoke test returned 200, so neither caught it. Shared state now lives in `lib/auth/sign-in-state.ts`. Re-verified against a cold-start dev server.
 - ⚠️ **Not yet verified end-to-end** — no real sign-in has been completed. Blocked on the email-template step below.
 
 **Decisions / deviations**
