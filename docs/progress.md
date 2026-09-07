@@ -165,6 +165,7 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - The browser now uploads directly to Storage with its own authenticated Supabase client and passes only the resulting path to `createPost`. The photo never transits the Next server.
 - The path is client-supplied, so the action validates it against `^<user id>/<uuid>.<ext>$`. The actual guarantee is the storage policy from 0005 — a user can only write under their own folder — while MIME type and the 5 MB cap are enforced by the bucket.
 - Upload starts as soon as a photo is chosen rather than on submit, overlapping the transfer with the rest of the form to protect the ~15s posting budget. Submit stays disabled until it finishes.
+- The first attempt at this fix was incomplete and the 1 MB error persisted: the file input still carried `name="photo"`, so the browser kept serializing the whole file into the action payload even though `createPost` no longer read it. The photo was effectively uploaded twice — once correctly to Storage, once uselessly into the Server Action body. A file input must be **unnamed** for this pattern to work.
 - Known wrinkle: abandoning the form after choosing a photo leaves an orphaned object in the bucket. Not addressed; worth a cleanup job or a `created_at`-based sweep if it becomes real.
 
 **Known issues / pending**

@@ -120,7 +120,10 @@ export function CreatePostForm({ userId }: { userId: string }) {
           <input
             ref={photoInputRef}
             id="photo"
-            name="photo"
+            // Deliberately unnamed: a named file input is serialized into the
+            // Server Action payload, which is capped at 1 MB. The file is
+            // uploaded straight to Storage instead, and only `photoPath` is
+            // submitted with the form.
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic"
             capture="environment"
