@@ -160,6 +160,13 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - Plain `<textarea>` styled to match `Input` rather than adding shadcn's `textarea` component, to keep the component surface small.
 - Tag chips are toggle buttons backed by hidden inputs rather than checkboxes — larger touch targets, and it keeps the form a plain uncontrolled submit.
 
+**Follow-up fix — photo uploads bypass the Server Action**
+- Submitting a real phone photo failed with `Body exceeded 1 MB limit`: Next caps a Server Action body at 1 MB, and Vercel caps request bodies at 4.5 MB, so raising the Next limit would only have moved the failure to production.
+- The browser now uploads directly to Storage with its own authenticated Supabase client and passes only the resulting path to `createPost`. The photo never transits the Next server.
+- The path is client-supplied, so the action validates it against `^<user id>/<uuid>.<ext>$`. The actual guarantee is the storage policy from 0005 — a user can only write under their own folder — while MIME type and the 5 MB cap are enforced by the bucket.
+- Upload starts as soon as a photo is chosen rather than on submit, overlapping the transfer with the rest of the form to protect the ~15s posting budget. Submit stays disabled until it finishes.
+- Known wrinkle: abandoning the form after choosing a photo leaves an orphaned object in the bucket. Not addressed; worth a cleanup job or a `created_at`-based sweep if it becomes real.
+
 **Known issues / pending**
 - ⚠️ **Location permission is effectively required.** `latitude`/`longitude` are non-null in the schema and there is no manual coordinate entry, so a student who denies location cannot post at all. PRD §6.4 expects a MapLibre pin as the alternative, but the tile provider is still undecided (§11), so that lands in step 6. Until then this is a real gap, not a styling nit.
 - Post-create redirects to `/`, since `/post/[id]` and the feed arrive in step 5.

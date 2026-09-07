@@ -34,7 +34,7 @@ export default async function NewPostPage() {
           </p>
         </div>
 
-        <CreatePostForm />
+        <CreatePostForm userId={user.id} />
       </main>
     </>
   );

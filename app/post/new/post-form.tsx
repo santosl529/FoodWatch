@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Camera, Loader2, MapPin } from "lucide-react";
 
 import { createPost } from "@/app/actions/posts";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,10 +20,11 @@ import { cn } from "@/lib/utils";
 import { initialCreatePostState } from "@/lib/posts/create-post-state";
 import { TAG_GROUPS, TAG_LABELS, type Tag } from "@/lib/posts/tags";
 
-function SubmitButton() {
+function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
+  const busy = pending || disabled;
   return (
-    <Button type="submit" size="lg" className="w-full" disabled={pending}>
+    <Button type="submit" size="lg" className="w-full" disabled={busy}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : null}
       {pending ? "Posting…" : "Post food"}
     </Button>
@@ -31,15 +33,46 @@ function SubmitButton() {
 
 type Coords = { latitude: number; longitude: number };
 
-export function CreatePostForm() {
+export function CreatePostForm({ userId }: { userId: string }) {
   const [state, formAction] = useActionState(createPost, initialCreatePostState);
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [coords, setCoords] = useState<Coords | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Upload as soon as a photo is chosen rather than on submit: it overlaps the
+   * transfer with the time spent filling in the rest of the form, which matters
+   * for the ~15s posting budget, and it keeps the form a plain action submit.
+   */
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    setPhotoPath(null);
+
+    const extension =
+      file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+    // First path segment must be the user id — the storage policy checks it.
+    const path = `${userId}/${crypto.randomUUID()}.${extension}`;
+
+    const supabase = createClient();
+    const { error } = await supabase.storage
+      .from("post-photos")
+      .upload(path, file, { contentType: file.type, upsert: false });
+
+    if (error) {
+      setUploadError(`Couldn't upload that photo: ${error.message}`);
+    } else {
+      setPhotoPath(path);
+    }
+    setUploading(false);
+  }
 
   function toggleTag(tag: Tag) {
     setSelectedTags((current) =>
@@ -91,11 +124,11 @@ export function CreatePostForm() {
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic"
             capture="environment"
-            required
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
               setPhotoPreview(file ? URL.createObjectURL(file) : null);
+              if (file) void uploadPhoto(file);
             }}
           />
 
@@ -119,6 +152,21 @@ export function CreatePostForm() {
             <Camera className="size-4" />
             {photoPreview ? "Choose a different photo" : "Take or choose a photo"}
           </Button>
+          <input type="hidden" name="photoPath" value={photoPath ?? ""} />
+
+          {uploading ? (
+            <p className="text-muted-foreground flex items-center gap-2 text-xs">
+              <Loader2 className="size-3 animate-spin" />
+              Uploading photo…
+            </p>
+          ) : null}
+
+          {uploadError ? (
+            <p role="alert" className="text-destructive text-xs">
+              {uploadError}
+            </p>
+          ) : null}
+
           <p className="text-muted-foreground text-xs">
             A photo is required — it&apos;s what makes a listing believable.
           </p>
@@ -276,7 +324,7 @@ export function CreatePostForm() {
         </p>
       ) : null}
 
-      <SubmitButton />
+      <SubmitButton disabled={uploading || !photoPath} />
     </form>
   );
 }

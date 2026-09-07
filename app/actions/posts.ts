@@ -10,15 +10,22 @@ import { createClient } from "@/lib/supabase/server";
 // NOTE: "use server" modules may only export async functions — the state type
 // and its initial value live in `lib/posts/create-post-state.ts`.
 
-const ACCEPTED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-];
-
-/** Mirrors the bucket's file_size_limit in 0005_storage.sql. */
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+/**
+ * Photos are uploaded to Storage directly from the browser, not through this
+ * action — a Server Action body is capped at 1 MB by Next (and 4.5 MB by
+ * Vercel), which a phone photo blows straight past. The client uploads with its
+ * own authenticated Supabase client and sends only the resulting path here.
+ *
+ * That path is client-supplied, so it is validated below. The real guarantee is
+ * the storage policy in 0005: a user can only write under `<their id>/`, so a
+ * path passing this check could not have been written by anyone else. MIME type
+ * and file size are enforced by the bucket itself.
+ */
+function photoPathPattern(userId: string): RegExp {
+  return new RegExp(
+    `^${userId}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|jpeg|png|webp|heic)$`,
+  );
+}
 
 const createPostSchema = z.object({
   description: z
@@ -78,27 +85,12 @@ export async function createPost(
     return fail(parsed.error.issues[0]?.message ?? "Check the form and retry.");
   }
 
-  const photo = formData.get("photo");
-  if (!(photo instanceof File) || photo.size === 0) {
+  const photoPath = String(formData.get("photoPath") ?? "");
+  if (!photoPath) {
     return fail("A photo is required — it's what makes a post trustworthy.");
   }
-  if (!ACCEPTED_IMAGE_TYPES.includes(photo.type)) {
-    return fail("Photos must be JPEG, PNG, WebP, or HEIC.");
-  }
-  if (photo.size > MAX_PHOTO_BYTES) {
-    return fail("That photo is over 5 MB. Try a smaller one.");
-  }
-
-  const extension = photo.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
-  // The first path segment must be the user id — the storage policies check it.
-  const photoPath = `${user.id}/${crypto.randomUUID()}.${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("post-photos")
-    .upload(photoPath, photo, { contentType: photo.type, upsert: false });
-
-  if (uploadError) {
-    return fail(`Couldn't upload the photo: ${uploadError.message}`);
+  if (!photoPathPattern(user.id).test(photoPath)) {
+    return fail("That photo upload didn't look right. Try choosing it again.");
   }
 
   const { data: post, error: insertError } = await supabase
