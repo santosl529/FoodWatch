@@ -215,3 +215,20 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 **Decisions / deviations**
 - Plain `<img>` rather than `next/image`: the latter needs the Supabase storage hostname added to `next.config.ts`, and config changes are the owner's call. Worth doing — it would give automatic resizing for phone photos, which is most of what Cloudinary was being considered for.
 - Two lint errors (`react-hooks/set-state-in-effect`) were fixed properly rather than suppressed: prop-to-state resync now happens during render (React's documented pattern), and the "asked for location once" guard is a ref rather than state.
+
+### 5c — Post detail + realtime comments (done, pending browser check)
+
+**What was built**
+- `app/post/[id]/page.tsx` — full photo, description, servings, location, age, creator, tags. Shows **closed** posts too, with an explanation derived from `close_reason`, rather than 404ing: a link shared into a group chat should say the food is gone.
+- `app/post/[id]/comments.tsx` — thread with a Supabase Realtime subscription on `comments` filtered by `post_id`.
+- `app/actions/comments.ts` — `addComment`, Zod-validated, inserting as the signed-in user.
+- `lib/posts/comment-state.ts`, plus `embeddedDisplayName` in `lib/posts/feed.ts`.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` all pass.
+- ⚠️ Realtime is entirely client-side and unverified. Proving it needs the same post open in two browsers — a green build says nothing here.
+
+**Decisions / deviations**
+- The realtime handler **refetches the thread** rather than appending the payload row. The payload carries only the raw `comments` row with no joined author name, and at a few comments per post a refetch is cheaper than patching one row and separately resolving its author.
+- `addComment` does not touch `last_activity_at`; the `comment_touches_post` trigger from 0006 owns that. Doing it in both places would duplicate the rule and race with itself.
+- `embeddedDisplayName` handles both object and array shapes instead of casting. PostgREST types a to-one embed as an array, and casting it away would break the day an embed genuinely is a list.

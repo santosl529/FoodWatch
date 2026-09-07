@@ -46,3 +46,20 @@ export function distanceLabel(meters: number | null): string | null {
   if (meters < 1000) return `${Math.round(meters)} m away`;
   return `${(meters / 1000).toFixed(1)} km away`;
 }
+
+/**
+ * Pulls `display_name` out of a PostgREST embedded `profiles` relation.
+ *
+ * The generated types treat an embed as an array even when the foreign key
+ * makes it to-one, so it arrives as an object at runtime but types as
+ * `{ display_name }[]`. Casting one to the other is a lie that breaks the day
+ * an embed really is a list, so handle both shapes instead.
+ */
+export function embeddedDisplayName(profiles: unknown): string | null {
+  const record = Array.isArray(profiles) ? profiles[0] : profiles;
+  if (record && typeof record === "object" && "display_name" in record) {
+    const value = (record as { display_name: unknown }).display_name;
+    return typeof value === "string" ? value : null;
+  }
+  return null;
+}
