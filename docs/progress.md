@@ -199,3 +199,19 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - **Security fix found while writing this.** `availability_events` RLS only checks `user_id = auth.uid()`, so any student could have inserted a `bump` row and re-surfaced someone else's post — routing around the creator-only rule `check_post_update_permissions` enforces on `posts.bumped_at`. The trigger now rejects a bump from anyone but the creator.
 - **Rule (d) is lazy, not scheduled.** `feed_posts` filters on `last_activity_at`, so stale posts vanish with no job latency and no pg_cron dependency. Such rows keep `status='active'` until touched; a sweep can tidy that later if it matters.
 - Tests are integration tests against the real project by necessity — the logic under test is Postgres triggers, so a mocked unit test would verify nothing. They use the secret key for fixtures, which bypasses RLS; the triggers do not depend on `auth.uid()`, so the rules exercised are the real ones. RLS itself is not what these cover.
+
+### 5b — Ranked feed at `/` (done, pending browser check)
+
+**What was built**
+- `app/page.tsx` — the feed replaces the step-1 placeholder. Server-renders `feed_posts` with null coordinates so there is no blank screen and no permission prompt before first paint. Guards itself (3c deferred).
+- `app/feed-list.tsx` — client component that asks for location once, then re-fetches the same RPC with coordinates so distance joins the ranking. Declining leaves the recency-only ordering, which is the §6.3 fallback.
+- `components/post-card.tsx` — photo, description, servings, location + distance, comment count, tags. Allergen (`contains-*`) tags sort first since those are what people scan for.
+- `lib/posts/feed.ts` — `FeedPost` type mirroring the RPC, public photo URL helper, relative time, distance formatting.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` all pass.
+- ⚠️ Not yet loaded in a browser. The location re-fetch is client-side, and this project has repeatedly shown that a green build says nothing about client behaviour.
+
+**Decisions / deviations**
+- Plain `<img>` rather than `next/image`: the latter needs the Supabase storage hostname added to `next.config.ts`, and config changes are the owner's call. Worth doing — it would give automatic resizing for phone photos, which is most of what Cloudinary was being considered for.
+- Two lint errors (`react-hooks/set-state-in-effect`) were fixed properly rather than suppressed: prop-to-state resync now happens during render (React's documented pattern), and the "asked for location once" guard is a ref rather than state.

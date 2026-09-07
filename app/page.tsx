@@ -1,35 +1,53 @@
-import { Nav } from "@/components/nav";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+import { FeedList } from "@/app/feed-list";
+import { Nav } from "@/components/nav";
+import { Button } from "@/components/ui/button";
+import type { FeedPost } from "@/lib/posts/feed";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function FeedPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Route protection (3c) is deferred, so the feed guards itself. RLS would
+  // return nothing to a signed-out visitor anyway; redirecting is clearer than
+  // showing a permanently empty feed.
+  if (!user) {
+    redirect("/signin");
+  }
+
+  // No coordinates server-side — the client re-fetches with them once granted.
+  const { data, error } = await supabase.rpc("feed_posts", {
+    user_lat: null,
+    user_lng: null,
+  });
+
+  const posts = (data ?? []) as FeedPost[];
+
   return (
     <>
       <Nav />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-10">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Penn Free Food
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-6">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Free food right now
           </h1>
-          <p className="text-muted-foreground">
-            Find and share leftover free food on campus before it&apos;s thrown
-            out — with trustworthy, crowd-sourced live availability.
-          </p>
+          <Button asChild size="sm" className="sm:hidden">
+            <Link href="/post/new">Post food</Link>
+          </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Project scaffold
-              <Badge variant="secondary">Step 1 · Foundation</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Next.js (App Router) + strict TypeScript + Tailwind + shadcn/ui are
-            wired up, with Supabase client/server helpers and session middleware
-            ready. Next up: schema &amp; RLS, then email-OTP auth.
-          </CardContent>
-        </Card>
+        {error ? (
+          <p role="alert" className="text-destructive text-sm">
+            Couldn&apos;t load the feed: {error.message}
+          </p>
+        ) : (
+          <FeedList initialPosts={posts} />
+        )}
       </main>
     </>
   );
