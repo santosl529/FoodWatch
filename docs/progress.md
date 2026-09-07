@@ -153,7 +153,8 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 
 **Verification**
 - `npm run typecheck`, `npm run lint`, `npm run build` pass; `/post/new` builds as a dynamic route.
-- ⚠️ **Nothing exercised end-to-end** — `0005_storage.sql` has not been applied, so the bucket does not exist and any upload will fail. No post has been created.
+- ✅ **Verified end-to-end.** A real post was created through the form: row present with correct description, servings, status, label and tags; photo stored under `<user id>/`, matching the storage policy; anonymous read of `posts` returns `[]` with a real row present (stronger RLS evidence than the earlier empty-table check).
+- Stored coordinates decode to 39.9539, -75.2021 — Penn campus, confirming longitude/latitude order in the EWKT string is correct. This is worth re-checking after any change to the location code: a swap is silent and puts every pin in the wrong hemisphere.
 
 **Decisions / deviations**
 - Public bucket rather than private + signed URLs: photo URLs are embedded in feed cards, the map, and post detail, so signing every URL on every render is a lot of machinery for photos of free food in public campus spaces. Writes stay restricted to the uploader's own folder.
