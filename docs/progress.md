@@ -140,3 +140,27 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 **Deferred**
 - 3c (route protection) is intentionally skipped for now, at the product owner's request, so development doesn't require a session on every route. It is ~20 lines in `lib/supabase/middleware.ts` when wanted.
 - 3d (long-lived sessions) is dashboard-only: confirm "Time-box user sessions" and "Inactivity timeout" are off under Authentication → Sessions.
+
+---
+
+## Step 4 — Post creation, manual (code done; migration not yet applied)
+
+**What was built**
+- `supabase/migrations/0005_storage.sql` — `post-photos` bucket (public read, 5 MB cap, image MIME allowlist) plus `storage.objects` policies. Path convention is `<user_id>/<uuid>.<ext>`; the insert/update/delete policies check that first segment against `auth.uid()`.
+- `lib/posts/tags.ts` — PRD §9 taxonomy as `as const` arrays plus a Zod enum, labels, and UI groupings. Shared so the step-7 classifier gets the same closed set and cannot invent tags.
+- `app/actions/posts.ts` — `createPost`: validates with Zod, uploads the photo, inserts the row as the signed-in user (so RLS applies), and removes the orphaned photo if the insert fails.
+- `app/post/new/post-form.tsx` + `page.tsx` — photo capture with preview, description, servings, geolocation capture, building label, and tag chips. The page guards itself since 3c is deferred.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build` pass; `/post/new` builds as a dynamic route.
+- ⚠️ **Nothing exercised end-to-end** — `0005_storage.sql` has not been applied, so the bucket does not exist and any upload will fail. No post has been created.
+
+**Decisions / deviations**
+- Public bucket rather than private + signed URLs: photo URLs are embedded in feed cards, the map, and post detail, so signing every URL on every render is a lot of machinery for photos of free food in public campus spaces. Writes stay restricted to the uploader's own folder.
+- Plain `<textarea>` styled to match `Input` rather than adding shadcn's `textarea` component, to keep the component surface small.
+- Tag chips are toggle buttons backed by hidden inputs rather than checkboxes — larger touch targets, and it keeps the form a plain uncontrolled submit.
+
+**Known issues / pending**
+- ⚠️ **Location permission is effectively required.** `latitude`/`longitude` are non-null in the schema and there is no manual coordinate entry, so a student who denies location cannot post at all. PRD §6.4 expects a MapLibre pin as the alternative, but the tile provider is still undecided (§11), so that lands in step 6. Until then this is a real gap, not a styling nit.
+- Post-create redirects to `/`, since `/post/[id]` and the feed arrive in step 5.
+- HEIC previews may not render in all browsers; the upload itself is unaffected.
