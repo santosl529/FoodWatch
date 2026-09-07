@@ -119,3 +119,24 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 
 **Known issues / pending**
 - Post-verification redirect goes to `/`, since `/feed` does not exist until step 5.
+- ⚠️ **Email deliverability is a launch blocker.** Sending from Resend's shared `onboarding@resend.dev` has no domain alignment, and Penn's filter put the sign-in code straight into spam. Every student hits this on their very first interaction, before they ever see a post. Fixing it needs a purchased domain verified in Resend (SPF/DKIM), then swapping the SMTP sender. Tracked as required before any real rollout.
+- Supabase gates **email-template editing behind configured custom SMTP** — not behind a paid plan, as first assumed. Until SMTP is set up the dashboard silently uses default templates, so `{{ .Token }}` cannot be added and no code appears in the email.
+- Supabase's built-in SMTP only delivers to addresses on the project's org team, at 2 messages/hour. Fine for solo development, unusable for real users.
+- **OTP length is a project setting, not a constant** (`GOTRUE_MAILER_OTP_LENGTH`, 6-10; this project issues 8). Hardcoding 6 in `maxLength` truncated correct codes and produced a misleading "incorrect or expired" error. Diagnosed by minting a token with `admin/generate_link`, which sidesteps email entirely — a good technique for isolating auth bugs from delivery problems.
+
+### 3e — Nav with signed-in user (done)
+
+**What was built**
+- `components/nav.tsx` is now an async server component: reads the session, looks up `display_name` from `profiles`, and shows either the account menu + "Post food" or a "Sign in" button.
+- `components/user-menu.tsx` — client component with an avatar dropdown showing display name + email, and a sign-out item.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build` pass. `/` is now a dynamic route, as expected once the nav reads the session.
+- ⚠️ The dropdown itself is client-side and has **not** been clicked in a browser. Earlier in this step a client-only error passed both a successful build and a `curl` smoke test, so "compiles and renders" is not evidence the menu works — sign-out needs a manual click to be considered verified.
+
+**Decisions / deviations**
+- Sign-out calls the server action inside a `useTransition` rather than wrapping the menu item in a `<form>`: Radix closes the menu on select, which can unmount a form before it submits.
+
+**Deferred**
+- 3c (route protection) is intentionally skipped for now, at the product owner's request, so development doesn't require a session on every route. It is ~20 lines in `lib/supabase/middleware.ts` when wanted.
+- 3d (long-lived sessions) is dashboard-only: confirm "Time-box user sessions" and "Inactivity timeout" are off under Authentication → Sessions.
