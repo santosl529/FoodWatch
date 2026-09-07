@@ -173,3 +173,29 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - ⚠️ **Location permission is effectively required.** `latitude`/`longitude` are non-null in the schema and there is no manual coordinate entry, so a student who denies location cannot post at all. PRD §6.4 expects a MapLibre pin as the alternative, but the tile provider is still undecided (§11), so that lands in step 6. Until then this is a real gap, not a styling nit.
 - Post-create redirects to `/`, since `/post/[id]` and the feed arrive in step 5.
 - HEIC previews may not render in all browsers; the upload itself is unaffected.
+
+---
+
+## Step 5 — Feed, detail, comments, availability lifecycle
+
+### 5a — Lifecycle triggers + feed ranking RPC (done)
+
+**What was built**
+- `supabase/migrations/0006_lifecycle.sql`:
+  - `gone_report_threshold()` = 2 and `post_max_age()` = 3 hours as inlined constant functions, so the PRD §6.1 tunables live in one documented place.
+  - `apply_post_close_rules` — BEFORE UPDATE on `posts`, closes with `zero_servings` when servings hit 0. Mutates NEW rather than issuing a second UPDATE, so there is no recursion and every path that changes servings is covered.
+  - `handle_availability_event` — AFTER INSERT on `availability_events`, the single entry point for crowd actions: applies servings updates, records bumps, and closes with `crowd_reports` once distinct gone-reports reach the threshold.
+  - `touch_post_on_comment` — comments count as activity (§6.1).
+  - `feed_posts(user_lat, user_lng)` — §6.3 ranking with PostGIS distance, plus lazy MAX_AGE filtering.
+  - `comments` added to the `supabase_realtime` publication.
+- `test/lifecycle.test.mjs` + `npm test` — Node's built-in runner, no new dependency.
+
+**Verification**
+- ✅ All 10 tests pass against the live project, covering every close rule in §6.1 plus ranking behaviour. Fixtures create and delete their own users and posts; confirmed nothing left behind.
+- The distance test asserts a closer post outranks an equally-aged farther one, which would fail loudly if longitude/latitude were ever transposed in the RPC rather than silently mis-ordering the feed.
+
+**Decisions / deviations**
+- **Availability events are the source of truth.** Clients insert an event; triggers apply the consequence to `posts`. One statement per action, atomic close rules, and the append-only RLS on the table stays meaningful.
+- **Security fix found while writing this.** `availability_events` RLS only checks `user_id = auth.uid()`, so any student could have inserted a `bump` row and re-surfaced someone else's post — routing around the creator-only rule `check_post_update_permissions` enforces on `posts.bumped_at`. The trigger now rejects a bump from anyone but the creator.
+- **Rule (d) is lazy, not scheduled.** `feed_posts` filters on `last_activity_at`, so stale posts vanish with no job latency and no pg_cron dependency. Such rows keep `status='active'` until touched; a sweep can tidy that later if it matters.
+- Tests are integration tests against the real project by necessity — the logic under test is Postgres triggers, so a mocked unit test would verify nothing. They use the secret key for fixtures, which bypasses RLS; the triggers do not depend on `auth.uid()`, so the rules exercised are the real ones. RLS itself is not what these cover.
