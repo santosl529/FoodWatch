@@ -50,7 +50,7 @@ No organizational/poster hierarchy beyond this. A post's creator has a couple of
 
 ## 4. Authentication & Onboarding
 
-- **Method:** Supabase Auth **email OTP** (passwordless — 6-digit code or magic link). No passwords.
+- **Method:** Supabase Auth **email OTP** (passwordless — emailed code or magic link). Code length is a Supabase project setting (6–10 digits); do not hardcode 6. No passwords.
 - **Domain gate:** Only `@upenn.edu` emails may complete signup. **This must be enforced server-side** (Supabase auth hook / database trigger / server-side check at the auth boundary), not merely validated in the client. Client-side validation is a UX nicety; the server check is the actual security boundary. A user typing a non-Penn email must not be able to obtain a session.
 - **Onboarding flow:** Enter email → receive OTP → verify → session created. On first login, optionally collect a display name (single field; can default to the email local-part to stay low-friction). Then land on the feed.
 - **Session persistence:** Long-lived session ("stay logged in") — the user signs in once and remains authenticated for an extended period (use Supabase's refresh-token session; set a long session lifetime). Re-verification only when the session genuinely expires.

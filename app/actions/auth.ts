@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { OTP_TOKEN_PATTERN } from "@/lib/auth/otp-token";
 import { PENN_EMAIL_PATTERN } from "@/lib/auth/penn-email";
 import type { SignInState } from "@/lib/auth/sign-in-state";
 import { createClient } from "@/lib/supabase/server";
@@ -24,7 +25,7 @@ const verifyOtpSchema = z.object({
   token: z
     .string()
     .trim()
-    .regex(/^\d{6}$/, "Enter the 6-digit code from your email."),
+    .regex(OTP_TOKEN_PATTERN, "Enter the code from your email."),
 });
 
 function firstIssue(error: z.ZodError): string {
@@ -36,7 +37,7 @@ function field(formData: FormData, name: string): string {
 }
 
 /**
- * Step 1 — send a 6-digit code to a Penn address.
+ * Step 1 — send a sign-in code to a Penn address.
  *
  * The Zod check here is a UX nicety, exactly like the client-side one. The
  * actual domain gate is the Before User Created hook in Supabase (PRD §4, §8),

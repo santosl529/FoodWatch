@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  OTP_TOKEN_DIGIT_PATTERN,
+  OTP_TOKEN_MAX_LENGTH,
+} from "@/lib/auth/otp-token";
 import { isPennEmail } from "@/lib/auth/penn-email";
 import { initialSignInState } from "@/lib/auth/sign-in-state";
 
@@ -91,7 +95,7 @@ function SignInFlow({ onRestart }: { onRestart: () => void }) {
       <div className="text-muted-foreground flex items-start gap-2 text-sm">
         <MailCheck className="mt-0.5 size-4 shrink-0" />
         <p>
-          We sent a 6-digit code to{" "}
+          We sent a code to{" "}
           <span className="text-foreground font-medium">
             {sendState.sentTo}
           </span>
@@ -108,10 +112,9 @@ function SignInFlow({ onRestart }: { onRestart: () => void }) {
           autoComplete="one-time-code"
           autoFocus
           required
-          maxLength={6}
-          pattern="\d{6}"
-          placeholder="123456"
-          className="text-center text-lg tracking-[0.5em]"
+          maxLength={OTP_TOKEN_MAX_LENGTH}
+          pattern={OTP_TOKEN_DIGIT_PATTERN}
+          className="text-center text-lg tracking-[0.3em]"
         />
       </div>
 
@@ -140,7 +143,7 @@ export function SignInCard() {
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
         <CardDescription>
-          No password needed — we&apos;ll email you a 6-digit code.
+          No password needed — we&apos;ll email you a sign-in code.
         </CardDescription>
       </CardHeader>
       <CardContent>

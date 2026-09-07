@@ -98,12 +98,12 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 **Next**
 - 3b: `/signin` page + `app/actions/auth.ts` (send/verify OTP, sign out).
 
-### 3b — Sign-in page + auth server actions (code done; one dashboard step pending)
+### 3b — Sign-in page + auth server actions (done)
 
 **What was built**
 - `lib/auth/penn-email.ts` — `PENN_EMAIL_PATTERN` / `isPennEmail`, mirroring the SQL domain check. Explicitly documented as cosmetic: the auth hook is the enforcing layer, and if the two ever diverge the hook wins.
 - `app/actions/auth.ts` — `sendOtp`, `verifyOtp`, `signOut`, Zod-validated and shaped for `useActionState`. `verifyOtp` rewrites Supabase's "Token has expired or is invalid" into plainer language and keeps the user on the code step. `signOut` redirects to `/signin`.
-- `app/signin/signin-form.tsx` — client component, two-step flow (email → 6-digit code). "Use a different email" remounts the flow via `key`, since `useActionState` has no reset.
+- `app/signin/signin-form.tsx` — client component, two-step flow (email → emailed code). "Use a different email" remounts the flow via `key`, since `useActionState` has no reset. Code input accepts GoTrue's 6–10 digit range (`lib/auth/otp-token.ts`), not a hardcoded 6.
 - `app/signin/page.tsx` — server component; redirects to `/` if a session already exists.
 - `zod` promoted from a transitive dependency to a direct one in `package.json`.
 
@@ -111,12 +111,11 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - `npm run typecheck`, `npm run lint`, `npm run build` all pass. `/signin` builds as a dynamic route.
 - Dev-server smoke test: `GET /signin` returns 200 and renders the expected fields.
 - Follow-up fix: `app/actions/auth.ts` initially exported `initialSignInState`, which a `"use server"` module may not do (async functions only). It surfaced only when the page was actually requested in dev — `npm run build` passed and an early smoke test returned 200, so neither caught it. Shared state now lives in `lib/auth/sign-in-state.ts`. Re-verified against a cold-start dev server.
-- ⚠️ **Not yet verified end-to-end** — no real sign-in has been completed. Blocked on the email-template step below.
+- Follow-up: OTP length is the shared 6–10 range in `lib/auth/otp-token.ts` (this project issues 8). `verifyOtp` stays `type: "email"`. End-to-end sign-in with an emailed code confirmed.
 
 **Decisions / deviations**
 - Plain `Input` for the code field rather than shadcn's `input-otp` component, to avoid pulling in another dependency for one screen. `inputMode="numeric"` + `autoComplete="one-time-code"` still gives iOS/Android autofill from the SMS/email code.
 - Two `useActionState` hooks (one per action) rather than a single branching action, so each step keeps its own error state.
 
 **Known issues / pending**
-- ⚠️ **Supabase sends a magic *link*, not a code, until the template is changed.** The Magic Link email template must include `{{ .Token }}` (Authentication → Emails → Magic Link). Until then the emailed message contains a URL and there is no 6-digit code to type, so the second step cannot be completed. Confirmed against Supabase docs.
 - Post-verification redirect goes to `/`, since `/feed` does not exist until step 5.
