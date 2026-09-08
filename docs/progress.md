@@ -170,7 +170,7 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - Known wrinkle: abandoning the form after choosing a photo leaves an orphaned object in the bucket. Not addressed; worth a cleanup job or a `created_at`-based sweep if it becomes real.
 
 **Known issues / pending**
-- ⚠️ **Location permission is effectively required.** `latitude`/`longitude` are non-null in the schema and there is no manual coordinate entry, so a student who denies location cannot post at all. PRD §6.4 expects a MapLibre pin as the alternative, but the tile provider is still undecided (§11), so that lands in step 6. Until then this is a real gap, not a styling nit.
+- ✅ **RESOLVED in 6b.** Location permission was effectively required — a student who denied it could not post, since `posts.location` is non-null and there was no manual entry. The `LocationPicker` (tap the map or drag the pin) is now the documented §6.4 alternative.
 - Post-create redirects to `/`, since `/post/[id]` and the feed arrive in step 5.
 - HEIC previews may not render in all browsers; the upload itself is unaffected.
 
@@ -275,3 +275,18 @@ This is the second instance of the same pattern (the first was `bump`, found in 
 - Markers are DOM elements rather than a GeoJSON symbol layer: at tens of posts performance is irrelevant, and DOM markers take the app's own Tailwind tokens. Each pin shows its servings count, which is more useful at a glance than a generic icon — and avoids injecting SVG markup via `innerHTML`.
 - 3D (extruded buildings, pitch) deliberately not used: it makes distance harder to judge, competes with the pins, and costs performance on the mid-range phones this is for.
 - maplibre-gl v6 is ESM with **named exports only**; there is no default export. Typecheck caught this.
+
+### 6b — Location picker on the create form (done, pending browser check)
+
+**What was built**
+- `components/location-picker.tsx` — MapLibre picker with a draggable marker, tap-to-place, and a "use my location" shortcut. Wired into `app/post/new/post-form.tsx`, replacing the geolocation-only capture.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` all pass.
+- ⚠️ Not opened in a browser. Worth re-checking the coordinate decode after posting, since latitude/longitude order is silent when wrong (see step 4).
+
+**Why this mattered**
+This closes the gap flagged in step 4: geolocation was the only way to set a location, so denying the browser prompt made posting impossible. Geolocation stays the fast path; the pin is the fallback PRD §6.4 always specified.
+
+**Decisions / deviations**
+- Two lint errors were fixed rather than suppressed: a ref updated during render now updates in an effect, and an import left unused after the refactor was removed.

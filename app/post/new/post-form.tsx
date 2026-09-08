@@ -3,9 +3,10 @@
 import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Image from "next/image";
-import { Camera, Loader2, MapPin } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 
 import { createPost } from "@/app/actions/posts";
+import { LocationPicker, type Coords } from "@/components/location-picker";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,8 +32,6 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
   );
 }
 
-type Coords = { latitude: number; longitude: number };
-
 export function CreatePostForm({ userId }: { userId: string }) {
   const [state, formAction] = useActionState(createPost, initialCreatePostState);
 
@@ -42,8 +41,6 @@ export function CreatePostForm({ userId }: { userId: string }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [coords, setCoords] = useState<Coords | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -79,33 +76,6 @@ export function CreatePostForm({ userId }: { userId: string }) {
       current.includes(tag)
         ? current.filter((t) => t !== tag)
         : [...current, tag],
-    );
-  }
-
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setLocationError("This browser can't share a location.");
-      return;
-    }
-    setLocating(true);
-    setLocationError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoords({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setLocating(false);
-      },
-      (error) => {
-        setLocationError(
-          error.code === error.PERMISSION_DENIED
-            ? "Location permission denied — you can still post by entering the building name, but the map and distance ranking need coordinates."
-            : "Couldn't get your location. Try again.",
-        );
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
     );
   }
 
@@ -229,49 +199,10 @@ export function CreatePostForm({ userId }: { userId: string }) {
             />
           </div>
 
-          <input
-            type="hidden"
-            name="latitude"
-            value={coords?.latitude ?? ""}
-          />
-          <input
-            type="hidden"
-            name="longitude"
-            value={coords?.longitude ?? ""}
-          />
+          <input type="hidden" name="latitude" value={coords?.latitude ?? ""} />
+          <input type="hidden" name="longitude" value={coords?.longitude ?? ""} />
 
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={useMyLocation}
-              disabled={locating}
-            >
-              {locating ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <MapPin className="size-4" />
-              )}
-              {coords ? "Update my location" : "Use my location"}
-            </Button>
-
-            {coords ? (
-              <p className="text-muted-foreground text-xs">
-                Pinned at {coords.latitude.toFixed(5)},{" "}
-                {coords.longitude.toFixed(5)}
-              </p>
-            ) : (
-              <p className="text-muted-foreground text-xs">
-                Needed for the map and for ranking posts by distance.
-              </p>
-            )}
-
-            {locationError ? (
-              <p role="alert" className="text-destructive text-xs">
-                {locationError}
-              </p>
-            ) : null}
-          </div>
+          <LocationPicker value={coords} onChange={setCoords} />
         </CardContent>
       </Card>
 
