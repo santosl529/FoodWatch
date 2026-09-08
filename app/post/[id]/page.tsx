@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Clock, MapPin, UtensilsCrossed } from "lucide-react";
 
+import { AdminDeletePost } from "@/components/admin-delete-post";
 import { AvailabilityControls } from "@/components/availability-controls";
 import { Nav } from "@/components/nav";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,13 @@ export default async function PostDetailPage({
   if (!post) {
     notFound();
   }
+
+  const { data: viewerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = viewerProfile?.role === "admin";
 
   const { data: commentRows } = await supabase
     .from("comments")
@@ -131,6 +139,12 @@ export default async function PostDetailPage({
         />
 
         <Comments postId={post.id} initialComments={comments} />
+
+        {isAdmin ? (
+          <div className="border-t pt-4">
+            <AdminDeletePost postId={post.id} />
+          </div>
+        ) : null}
       </main>
     </>
   );

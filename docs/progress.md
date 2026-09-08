@@ -343,3 +343,24 @@ The first run failed two assertions, the second passed. Cause: `node --test` run
 - **Mark-all-read on opening the dropdown**, rather than per-item read state. The badge answers "anything new since I looked", and per-item tracking is bookkeeping this doesn't earn yet.
 - The "where to watch" card states plainly that configuring neither a radius nor a building means no new-post notifications — otherwise 8a's deliberate silence reads as a bug.
 - `next/dynamic` with `ssr: false` is rejected inside a Server Component, so the settings form needs a client wrapper exactly like the map did. **Typecheck and lint both passed this; only `npm run build` caught it.**
+
+---
+
+## Step 9 — Polish & moderation
+
+### 9a — Anti-abuse + admin moderation (done)
+
+**What was built**
+- `supabase/migrations/0009_moderation.sql`:
+  - `rate_limit_gone_reports` — 12 gone-reports per user per hour. The unique index from 0002 already stopped double-reporting one post; this stops one person walking the feed and closing everything. With a threshold of 2, two griefers could otherwise clear the board.
+  - `is_admin()` plus `posts_delete_admin` / `comments_delete_admin` RLS policies.
+- `app/actions/moderation.ts`, `components/admin-delete-post.tsx` — delete control on post detail, shown only to admins.
+
+**Verification**
+- ✅ All 30 tests pass, including five new ones: admin can delete others' posts and comments, an ordinary student cannot, authors keep their own delete, and the rate limit accepts exactly 12 then rejects.
+- Confirmed no test fixtures left behind.
+
+**Decisions / deviations**
+- **Admin deletes moved from the secret-key client to RLS policies.** 0003 had assumed moderation would bypass RLS via the service key. A policy is better on three counts: the rule sits with every other access rule rather than in application code, admins act as themselves so deletes are attributable, and no secret key needs to reach a delete path. `is_admin()` reads `profiles.role`, which `prevent_role_change` (0002) already stops anyone granting themselves.
+- The moderation server action has no privileged path — a non-admin calling it matches zero rows under RLS. The button's visibility is cosmetic, as with every other check in this codebase.
+- Rate limit is deliberately generous. PRD §6.1 says don't over-build moderation; the aim is making mass griefing inconvenient, not policing a student who clears out stale posts after an event.
