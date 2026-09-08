@@ -297,3 +297,31 @@ This closes the gap flagged in step 4: geolocation was the only way to set a loc
 
 **Decisions / deviations**
 - Two lint errors were fixed rather than suppressed: a ref updated during render now updates in an effect, and an import left unused after the refactor was removed.
+
+---
+
+## Step 8 — Notifications
+
+### 8a — Server-side fan-out (done)
+
+**What was built**
+- `supabase/migrations/0008_notifications.sql`:
+  - `post_matches_dietary_filter(post_tags, filter)` — defines the previously-unspecified `dietary_filter` jsonb shape as `{"require": [...], "exclude": [...]}`. A post matches when it carries every required tag and none of the excluded ones; `{}` matches everything.
+  - `notify_on_new_post` — AFTER INSERT on `posts`, inserting one notification per user whose stored preferences match on location (radius **or** watched building) **and** dietary filter, never to the poster.
+  - `notify_on_new_comment` — notifies the post's creator only, skipping their own comments and respecting `notify_on_comment`.
+  - `notifications` added to the `supabase_realtime` publication.
+- `test/helpers.mjs` — shared fixtures extracted from the lifecycle suite.
+- `test/notifications.test.mjs` — 10 tests covering radius hit/miss, self-notification, unconfigured silence, both dietary filter directions, building match, and all three comment cases.
+
+**Verification**
+- ✅ All 25 tests pass, three runs in a row.
+
+**Authorization**
+Recipients are computed inside a `SECURITY DEFINER` trigger purely from each recipient's own stored preferences; nothing the poster or commenter supplies influences who is notified, and `notifications` still has no user INSERT policy, so these triggers are its only writer. This is the third table whose rows affect other users — after `bump` and `posts.status` — and the first designed with that pattern in mind rather than patched afterwards.
+
+**Decisions / deviations**
+- A user with neither a radius nor watched buildings receives **no** nearby-post notifications. Silence until you opt in is the right default; the settings UI must say so, or preferences will look broken.
+- Comment notifications default to on when a user has no preferences row at all — replies to your own post are the one alert worth having unasked.
+
+**Flaky test found and fixed**
+The first run failed two assertions, the second passed. Cause: `node --test` runs test files in **parallel processes** against one shared database, and the lifecycle suite creates posts at Penn's coordinates — which matched radius preferences registered by the notification suite, leaking notifications across files. Fixed by anchoring the notification suite's geography far from campus and adding `--test-concurrency=1`. Worth remembering: integration suites sharing a real database are only isolated if their *fixtures* cannot see each other.
