@@ -202,7 +202,7 @@ describe("availability lifecycle", () => {
       }),
     });
     assert.notEqual(stranger.status, 201, "non-creator bump must be rejected");
-    assert.match(stranger.body, /Only the post creator can bump/);
+    assert.match(stranger.body, /Only the post creator/);
   });
 
   it("treats a comment as activity", async () => {
@@ -294,5 +294,151 @@ describe("feed ranking", () => {
       nearRow.score > farRow.score,
       "a closer post of the same age should outrank a farther one",
     );
+  });
+});
+
+/**
+ * These run as a real signed-in user rather than with the secret key, because
+ * the guard in 0007 exempts admin calls (auth.uid() is null). That also makes
+ * them the first tests here that genuinely exercise RLS.
+ */
+const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+async function sessionFor(email) {
+  // Mint an OTP without sending mail, then exchange it for an access token.
+  const gen = await fetch(`${url}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ type: "magiclink", email }),
+  });
+  const { email_otp } = await gen.json();
+
+  const verify = await fetch(`${url}/auth/v1/verify`, {
+    method: "POST",
+    headers: { apikey: publishable, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, token: email_otp, type: "email" }),
+  });
+  const { access_token } = await verify.json();
+  if (!access_token) throw new Error(`no session for ${email}`);
+  return access_token;
+}
+
+function asUser(token) {
+  return {
+    apikey: publishable,
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+describe("availability changes are event-driven only (0007 guard)", () => {
+  let creatorId;
+  let creatorEmail;
+  let strangerId;
+  let strangerEmail;
+  let strangerToken;
+  let post;
+
+  before(async () => {
+    creatorEmail = `lifecycle-test-guard-owner-${Date.now()}@upenn.edu`;
+    strangerEmail = `lifecycle-test-guard-other-${Date.now()}@upenn.edu`;
+
+    for (const [email, ref] of [[creatorEmail, "creator"], [strangerEmail, "stranger"]]) {
+      const response = await fetch(`${url}/auth/v1/admin/users`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ email, email_confirm: true }),
+      });
+      const body = await response.json();
+      if (ref === "creator") creatorId = body.id;
+      else strangerId = body.id;
+    }
+
+    strangerToken = await sessionFor(strangerEmail);
+    post = await createPost(creatorId, { description: "lifecycle-test guard" });
+  });
+
+  after(async () => {
+    if (post) await rest(`posts?id=eq.${post.id}`, { method: "DELETE" }).catch(() => {});
+    for (const id of [creatorId, strangerId]) if (id) await deleteUser(id);
+  });
+
+  it("refuses a direct status write, so one user cannot close a post alone", async () => {
+    const response = await fetch(`${url}/rest/v1/posts?id=eq.${post.id}`, {
+      method: "PATCH",
+      headers: asUser(strangerToken),
+      body: JSON.stringify({ status: "closed", close_reason: "creator" }),
+    });
+    const body = await response.text();
+
+    assert.notEqual(response.status, 204, "direct status write must be rejected");
+    assert.match(body, /must go through availability_events/);
+
+    const unchanged = await getPost(post.id);
+    assert.equal(unchanged.status, "active");
+  });
+
+  it("refuses a direct servings write, keeping the per-user log complete", async () => {
+    const response = await fetch(`${url}/rest/v1/posts?id=eq.${post.id}`, {
+      method: "PATCH",
+      headers: asUser(strangerToken),
+      body: JSON.stringify({ servings_remaining: 0 }),
+    });
+    assert.notEqual(response.status, 204);
+
+    const unchanged = await getPost(post.id);
+    assert.equal(unchanged.servings_remaining, 4);
+  });
+
+  it("refuses a creator_close from someone who is not the creator", async () => {
+    const response = await fetch(`${url}/rest/v1/availability_events`, {
+      method: "POST",
+      headers: asUser(strangerToken),
+      body: JSON.stringify({
+        post_id: post.id,
+        user_id: strangerId,
+        type: "creator_close",
+      }),
+    });
+    const body = await response.text();
+
+    assert.notEqual(response.status, 201);
+    assert.match(body, /Only the post creator/);
+    const unchanged = await getPost(post.id);
+    assert.equal(unchanged.status, "active");
+  });
+
+  it("still allows a normal gone report through the event path", async () => {
+    const response = await fetch(`${url}/rest/v1/availability_events`, {
+      method: "POST",
+      headers: asUser(strangerToken),
+      body: JSON.stringify({
+        post_id: post.id,
+        user_id: strangerId,
+        type: "gone_report",
+      }),
+    });
+    assert.equal(response.status, 201, await response.text());
+
+    const updated = await getPost(post.id);
+    assert.equal(updated.status, "active", "one report still should not close it");
+  });
+
+  it("lets the creator close their own post via an event", async () => {
+    const creatorToken = await sessionFor(creatorEmail);
+    const response = await fetch(`${url}/rest/v1/availability_events`, {
+      method: "POST",
+      headers: asUser(creatorToken),
+      body: JSON.stringify({
+        post_id: post.id,
+        user_id: creatorId,
+        type: "creator_close",
+      }),
+    });
+    assert.equal(response.status, 201, await response.text());
+
+    const closed = await getPost(post.id);
+    assert.equal(closed.status, "closed");
+    assert.equal(closed.close_reason, "creator");
   });
 });

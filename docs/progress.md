@@ -232,3 +232,23 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 - The realtime handler **refetches the thread** rather than appending the payload row. The payload carries only the raw `comments` row with no joined author name, and at a few comments per post a refetch is cheaper than patching one row and separately resolving its author.
 - `addComment` does not touch `last_activity_at`; the `comment_touches_post` trigger from 0006 owns that. Doing it in both places would duplicate the rule and race with itself.
 - `embeddedDisplayName` handles both object and array shapes instead of casting. PostgREST types a to-one embed as an array, and casting it away would break the day an embed genuinely is a list.
+
+### 5d — Availability controls + event-only guard (done)
+
+**What was built**
+- `supabase/migrations/0007_lifecycle_guard.sql` — closes a real hole in the step-2 design (below). Adds a `creator_close` event type, an `app.in_lifecycle` marker set by the lifecycle functions, and a guard trigger rejecting direct user writes to `status`, `closed_at`, `close_reason`, `servings_remaining`, `bumped_at`, `last_activity_at`.
+- `app/actions/availability.ts` — `reportGone`, `setServings`, `bumpPost`, `closePost`. All insert events; none writes to `posts`.
+- `components/availability-controls.tsx` — "I took one", "It's gone", plus creator-only bump and close, wired into post detail.
+
+**Verification**
+- ✅ All 15 tests pass, including five new ones running as **real signed-in users** rather than the secret key — the guard exempts admin calls, so any other approach would have proved nothing. These are also the suite's first genuine RLS coverage.
+- `npm run typecheck`, `npm run lint`, `npm run build` pass.
+- ⚠️ The buttons themselves have not been clicked in a browser.
+
+**The hole this closed**
+RLS on `posts` grants authenticated students write access to the crowd-sourced columns, which reads correctly as "anyone may report food gone." Taken literally it meant **one API call could close any post**, bypassing the two-distinct-user threshold completely — and a direct write to `servings_remaining` left no per-user record, so §6.1's "logged per-user so abuse can be traced" was quietly untrue. Both are now impossible: those columns change only via attributable events.
+
+This is the second instance of the same pattern (the first was `bump`, found in 5a). **A table whose rows cause side effects elsewhere needs authorization on the effects, not just row ownership.** Step 8's notifications have exactly this shape and should be reviewed with it in mind.
+
+**Note**
+- The migration file briefly contained stray characters (`availability_eventsok i`) typed into the editor after it was run. The `creator_close` test passing confirms the original run applied cleanly. Fixed in place.

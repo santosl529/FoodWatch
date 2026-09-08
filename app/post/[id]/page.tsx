@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Clock, MapPin, UtensilsCrossed } from "lucide-react";
 
+import { AvailabilityControls } from "@/components/availability-controls";
 import { Nav } from "@/components/nav";
 import { Badge } from "@/components/ui/badge";
 import { embeddedDisplayName, photoUrl, timeAgo } from "@/lib/posts/feed";
@@ -122,7 +123,12 @@ export default async function PostDetailPage({
           ) : null}
         </div>
 
-        {/* Availability + creator controls arrive in 5d. */}
+        <AvailabilityControls
+          postId={post.id}
+          servingsRemaining={post.servings_remaining}
+          isCreator={post.creator_id === user.id}
+          isClosed={isClosed}
+        />
 
         <Comments postId={post.id} initialComments={comments} />
       </main>
