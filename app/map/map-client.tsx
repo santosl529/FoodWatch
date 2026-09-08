@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 
 import type { FeedPost } from "@/lib/posts/feed";
+import type { NotifyArea } from "./map-view";
 
 /**
  * `maplibre-gl` is a browser-only library — it reaches for `window` and WebGL
@@ -25,6 +26,12 @@ const MapView = dynamic(
   },
 );
 
-export function MapClient({ posts }: { posts: FeedPost[] }) {
-  return <MapView posts={posts} />;
+export function MapClient({
+  posts,
+  notifyArea,
+}: {
+  posts: FeedPost[];
+  notifyArea: NotifyArea | null;
+}) {
+  return <MapView posts={posts} notifyArea={notifyArea} />;
 }

@@ -18,6 +18,7 @@ import {
   CAMPUS_DEFAULT_ZOOM,
   MAP_STYLE_URL,
 } from "@/lib/map/config";
+import { circlePolygon } from "@/lib/geo/circle";
 import { distanceLabel, photoUrl, timeAgo, type FeedPost } from "@/lib/posts/feed";
 
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -30,10 +31,23 @@ import "maplibre-gl/dist/maplibre-gl.css";
  * be styled with the same Tailwind tokens as the rest of the app. Revisit if
  * this ever needs to draw thousands.
  */
-export function MapView({ posts }: { posts: FeedPost[] }) {
+export type NotifyArea = {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+};
+
+export function MapView({
+  posts,
+  notifyArea,
+}: {
+  posts: FeedPost[];
+  notifyArea: NotifyArea | null;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const userMarkerRef = useRef<Marker | null>(null);
   const [selected, setSelected] = useState<FeedPost | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -78,12 +92,73 @@ export function MapView({ posts }: { posts: FeedPost[] }) {
       "top-right",
     );
 
+    // Sources and layers can only be added after the style has loaded.
+    map.on("load", () => {
+      if (notifyArea && notifyArea.radiusMeters > 0) {
+        map.addSource("notify-area", {
+          type: "geojson",
+          data: circlePolygon(
+            { latitude: notifyArea.latitude, longitude: notifyArea.longitude },
+            notifyArea.radiusMeters,
+          ),
+        });
+        map.addLayer({
+          id: "notify-area-fill",
+          type: "fill",
+          source: "notify-area",
+          paint: { "fill-color": "#2563eb", "fill-opacity": 0.08 },
+        });
+        map.addLayer({
+          id: "notify-area-outline",
+          type: "line",
+          source: "notify-area",
+          paint: {
+            "line-color": "#2563eb",
+            "line-width": 1.5,
+            "line-dasharray": [2, 2],
+          },
+        });
+      }
+    });
+
+    // A live dot for the viewer. GeolocateControl can do this, but only after
+    // the user presses it — showing it unprompted answers "how far is that?"
+    // without a tap.
+    let watchId: number | null = null;
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const lngLat: [number, number] = [
+            position.coords.longitude,
+            position.coords.latitude,
+          ];
+          if (userMarkerRef.current) {
+            userMarkerRef.current.setLngLat(lngLat);
+            return;
+          }
+          const dot = document.createElement("div");
+          dot.className =
+            "size-3.5 rounded-full border-2 border-white bg-blue-600 shadow-md";
+          dot.setAttribute("aria-label", "Your location");
+          userMarkerRef.current = new Marker({ element: dot })
+            .setLngLat(lngLat)
+            .addTo(map);
+        },
+        () => {
+          // Declined or unavailable — the map is still perfectly usable.
+        },
+        { enableHighAccuracy: true, maximumAge: 30_000 },
+      );
+    }
+
     mapRef.current = map;
     return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      userMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [notifyArea]);
 
   useEffect(() => {
     const map = mapRef.current;

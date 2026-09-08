@@ -381,3 +381,18 @@ Two problems, one fix, no dependency. iPhones shoot HEIC, which most browsers ca
 
 **Note**
 `xs:` is not a default Tailwind breakpoint. An `xs:inline` class written by mistake generates nothing and fails silently — the same class of invisible error as the `calc()` whitespace bug in step 6.
+
+### 9c — Your location and notification radius on the map (done, pending browser check)
+
+**What was built**
+- `lib/geo/circle.ts` — GeoJSON polygon approximating a circle. MapLibre's `circle` layer sizes in **pixels**, so it cannot represent a real-world radius; a polygon scales with the map because it is actual geography. The longitude step is divided by `cos(latitude)`, without which the shape renders as an ellipse.
+- `app/map/map-view.tsx` — a live blue dot for the viewer via `watchPosition`, and a dashed circle showing the notification radius.
+- `app/map/page.tsx` reads `notification_preferences` and passes the decoded centre and radius through.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (30) pass.
+- ⚠️ Not seen in a browser; the dot needs location permission and the circle needs a saved radius.
+
+**Decisions / deviations**
+- The circle is drawn at the **centre saved in settings**, not around the viewer's current position. That centre is what the fan-out trigger actually compares posts against, so drawing it anywhere else would show a radius that doesn't match what gets notified.
+- The dot uses `watchPosition` and appears unprompted rather than waiting for `GeolocateControl` to be pressed — "how far is that?" is the map's whole job. Declining permission leaves the map fully usable.
