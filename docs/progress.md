@@ -172,7 +172,7 @@ Running log of what's been built. See `docs/prd.md` §12 for the build order.
 **Known issues / pending**
 - ✅ **RESOLVED in 6b.** Location permission was effectively required — a student who denied it could not post, since `posts.location` is non-null and there was no manual entry. The `LocationPicker` (tap the map or drag the pin) is now the documented §6.4 alternative.
 - Post-create redirects to `/`, since `/post/[id]` and the feed arrive in step 5.
-- HEIC previews may not render in all browsers; the upload itself is unaffected.
+- ✅ RESOLVED in 9b: HEIC previews are fixed by client-side re-encoding to JPEG.
 
 ---
 
@@ -364,3 +364,20 @@ The first run failed two assertions, the second passed. Cause: `node --test` run
 - **Admin deletes moved from the secret-key client to RLS policies.** 0003 had assumed moderation would bypass RLS via the service key. A policy is better on three counts: the rule sits with every other access rule rather than in application code, admins act as themselves so deletes are attributable, and no secret key needs to reach a delete path. `is_admin()` reads `profiles.role`, which `prevent_role_change` (0002) already stops anyone granting themselves.
 - The moderation server action has no privileged path — a non-admin calling it matches zero rows under RLS. The button's visibility is cosmetic, as with every other check in this codebase.
 - Rate limit is deliberately generous. PRD §6.1 says don't over-build moderation; the aim is making mass griefing inconvenient, not policing a student who clears out stale posts after an event.
+
+### 9b — Mobile pass + photo compression (done, pending browser check)
+
+**What was built**
+- Nav: the wordmark hides below `sm`. With five items (brand, Map, Post food, bell, avatar) it no longer fits a phone, and the actions matter more than the branding.
+- Removed the feed's mobile-only "Post food" button — the nav now always shows one, so phones had two.
+- `lib/posts/compress-photo.ts` — downscales to a 1600px long edge and re-encodes as JPEG at 0.8 before upload. Falls back to the original file on any failure.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (30) all pass.
+- ⚠️ Not yet checked on a real phone, and the HEIC path specifically needs an iPhone photo to confirm.
+
+**Why compression**
+Two problems, one fix, no dependency. iPhones shoot HEIC, which most browsers can't render, so the create-form preview was blank for exactly the users most likely to post — canvas re-encoding fixes that, since iOS Safari decodes HEIC natively. And a 3-5 MB phone photo costs several seconds of the ~15s posting budget (PRD §1) on campus wifi; 1600px/0.8 lands around 200-400 KB, ample for a thumbnail and a detail view. Compression never blocks a post: any failure uploads the original.
+
+**Note**
+`xs:` is not a default Tailwind breakpoint. An `xs:inline` class written by mistake generates nothing and fails silently — the same class of invisible error as the `calc()` whitespace bug in step 6.

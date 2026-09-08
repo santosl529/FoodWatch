@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { FeedList } from "@/app/feed-list";
 import { Nav } from "@/components/nav";
-import { Button } from "@/components/ui/button";
 import type { FeedPost } from "@/lib/posts/feed";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,14 +30,9 @@ export default async function FeedPage() {
     <>
       <Nav />
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight">
-            Free food right now
-          </h1>
-          <Button asChild size="sm" className="sm:hidden">
-            <Link href="/post/new">Post food</Link>
-          </Button>
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">
+          Free food right now
+        </h1>
 
         {error ? (
           <p role="alert" className="text-destructive text-sm">

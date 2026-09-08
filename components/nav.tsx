@@ -40,8 +40,10 @@ export async function Nav() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <UtensilsCrossed className="size-5" />
-          <span>Penn Free Food</span>
+          <UtensilsCrossed className="size-5 shrink-0" />
+          {/* The wordmark is the first thing to go on a narrow screen — the
+              actions to its right matter more than the branding. */}
+          <span className="hidden sm:inline">Penn Free Food</span>
         </Link>
 
         {user ? (

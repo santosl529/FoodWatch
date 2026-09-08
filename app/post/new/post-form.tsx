@@ -7,6 +7,7 @@ import { Camera, Loader2 } from "lucide-react";
 
 import { createPost } from "@/app/actions/posts";
 import { LocationPicker, type Coords } from "@/components/location-picker";
+import { compressPhoto } from "@/lib/posts/compress-photo";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,15 +49,21 @@ export function CreatePostForm({ userId }: { userId: string }) {
    * transfer with the time spent filling in the rest of the form, which matters
    * for the ~15s posting budget, and it keeps the form a plain action submit.
    */
-  async function uploadPhoto(file: File) {
+  async function uploadPhoto(original: File) {
     setUploading(true);
     setUploadError(null);
     setPhotoPath(null);
+
+    // Downscale and re-encode first: shrinks a 4 MB phone photo to a few
+    // hundred KB, and converts HEIC to something browsers can display.
+    const file = await compressPhoto(original);
 
     const extension =
       file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
     // First path segment must be the user id — the storage policy checks it.
     const path = `${userId}/${crypto.randomUUID()}.${extension}`;
+
+    setPhotoPreview(URL.createObjectURL(file));
 
     const supabase = createClient();
     const { error } = await supabase.storage
@@ -100,7 +107,6 @@ export function CreatePostForm({ userId }: { userId: string }) {
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              setPhotoPreview(file ? URL.createObjectURL(file) : null);
               if (file) void uploadPhoto(file);
             }}
           />
