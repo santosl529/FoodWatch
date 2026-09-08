@@ -396,3 +396,21 @@ Two problems, one fix, no dependency. iPhones shoot HEIC, which most browsers ca
 **Decisions / deviations**
 - The circle is drawn at the **centre saved in settings**, not around the viewer's current position. That centre is what the fan-out trigger actually compares posts against, so drawing it anywhere else would show a radius that doesn't match what gets notified.
 - The dot uses `watchPosition` and appears unprompted rather than waiting for `GeolocateControl` to be pressed — "how far is that?" is the map's whole job. Declining permission leaves the map fully usable.
+
+### 9d — Fix: notification centre silently saved as (0, 0)
+
+**The bug**
+The radius circle didn't appear on the map. It was in fact drawing perfectly — around **longitude 0, latitude 0**, in the Gulf of Guinea, roughly 5,000 km from campus.
+
+Two mistakes compounded:
+1. `z.coerce.number()` parses `""` as `0`, so `z.union([z.coerce.number(), z.literal("")])` never reached the empty-string branch. An unset coordinate arrived as the number `0`, which then satisfied the `latitude !== ""` check for "did the user pick a centre?". Empty input became a valid point.
+2. `LocationPicker` renders a pin at campus centre immediately, but reports nothing until the user drags or taps. A user who thought the visible pin *was* their choice saved no coordinates at all — feeding mistake 1.
+
+**The fix**
+`emptyToUndefined` preprocessing runs before any coercion, so blank fields become `undefined` rather than zero. The settings form now seeds its coordinate state to campus centre so the stored value always matches the pin on screen. The stale `(0, 0)` row was cleared.
+
+**Worth remembering**
+`z.coerce` is not safe on optional fields: `Number("")` is `0`, `Number(null)` is `0`, and `Number(false)` is `0`. Preprocess to `undefined` first, or a blank input becomes a plausible-looking value that passes validation. Nothing in typecheck, lint, build, or 30 tests caught this — only looking at the map did.
+
+**Post form note**
+`app/post/new` deliberately still requires an explicit pin placement. Defaulting a post's location to campus centre would put food at the wrong place on the map, which is worse than making someone tap once.

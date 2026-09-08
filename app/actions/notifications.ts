@@ -12,15 +12,26 @@ import { createClient } from "@/lib/supabase/server";
  * has own-row RLS, so `user_id` is taken from the session and never from the
  * form. Who gets notified is decided by the triggers in 0008 reading these
  * rows; nothing here can target anyone else.
+ *
+ * Empty form fields must become `undefined` BEFORE any coercion.
+ *
+ * `z.coerce.number()` parses `""` as `0`, so a union of
+ * `[coerce.number(), literal("")]` never reaches the empty branch — it happily
+ * accepts the empty string as zero. That turned an unset map pin into
+ * coordinates (0, 0): a valid point in the Gulf of Guinea, which then passed
+ * the "has the user set a centre?" check and drew their notification radius
+ * 5,000 km from campus.
  */
+const emptyToUndefined = (value: unknown) =>
+  value === "" || value == null ? undefined : value;
+
+const optionalNumber = (schema: z.ZodType<number>) =>
+  z.preprocess(emptyToUndefined, schema.optional());
+
 const settingsSchema = z.object({
-  radiusMeters: z
-    .union([z.coerce.number().int().min(50).max(5000), z.literal("")])
-    .optional(),
-  latitude: z.union([z.coerce.number().min(-90).max(90), z.literal("")]).optional(),
-  longitude: z
-    .union([z.coerce.number().min(-180).max(180), z.literal("")])
-    .optional(),
+  radiusMeters: optionalNumber(z.coerce.number().int().min(50).max(5000)),
+  latitude: optionalNumber(z.coerce.number().min(-90).max(90)),
+  longitude: optionalNumber(z.coerce.number().min(-180).max(180)),
   buildingLabels: z.string().max(500).optional(),
   require: z.array(tagSchema).max(12),
   exclude: z.array(tagSchema).max(12),
@@ -58,7 +69,7 @@ export async function saveNotificationSettings(
   }
 
   const { radiusMeters, latitude, longitude } = parsed.data;
-  const hasCenter = latitude !== "" && longitude !== "" && latitude != null && longitude != null;
+  const hasCenter = latitude != null && longitude != null;
 
   const buildingLabels = (parsed.data.buildingLabels ?? "")
     .split(",")
@@ -75,8 +86,7 @@ export async function saveNotificationSettings(
   const { error } = await supabase.from("notification_preferences").upsert(
     {
       user_id: user.id,
-      radius_meters:
-        radiusMeters === "" || radiusMeters == null ? null : radiusMeters,
+      radius_meters: radiusMeters ?? null,
       center: hasCenter ? `SRID=4326;POINT(${longitude} ${latitude})` : null,
       building_labels: buildingLabels,
       dietary_filter: dietaryFilter,

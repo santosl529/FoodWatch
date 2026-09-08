@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CAMPUS_CENTER } from "@/lib/map/config";
 import { cn } from "@/lib/utils";
 import {
   initialNotificationSettingsState,
@@ -89,10 +90,13 @@ export function NotificationSettingsForm({
     initialNotificationSettingsState,
   );
 
-  const [coords, setCoords] = useState<Coords | null>(
+  // Default to campus centre rather than null. The picker renders a pin there
+  // regardless, and a user quite reasonably reads that pin as their choice —
+  // leaving the value unset is how an unmoved pin silently became (0, 0).
+  const [coords, setCoords] = useState<Coords>(
     preferences?.latitude != null && preferences?.longitude != null
       ? { latitude: preferences.latitude, longitude: preferences.longitude }
-      : null,
+      : { latitude: CAMPUS_CENTER.latitude, longitude: CAMPUS_CENTER.longitude },
   );
   const [require, setRequire] = useState<Tag[]>(
     preferences?.dietary_filter?.require ?? [],
