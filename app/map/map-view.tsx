@@ -35,16 +35,38 @@ export function MapView({ posts }: { posts: FeedPost[] }) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [selected, setSelected] = useState<FeedPost | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = new MapLibreMap({
-      container: containerRef.current,
-      style: MAP_STYLE_URL,
-      center: [CAMPUS_CENTER.longitude, CAMPUS_CENTER.latitude],
-      zoom: CAMPUS_DEFAULT_ZOOM,
-      attributionControl: { compact: true },
+    let map: MapLibreMap;
+    try {
+      map = new MapLibreMap({
+        container: containerRef.current,
+        style: MAP_STYLE_URL,
+        center: [CAMPUS_CENTER.longitude, CAMPUS_CENTER.latitude],
+        zoom: CAMPUS_DEFAULT_ZOOM,
+        attributionControl: { compact: true },
+      });
+    } catch (caught) {
+      // A blank map tells you nothing. Surface the reason on the page so a
+      // failure here is diagnosable without opening devtools.
+      //
+      // Suppressed deliberately: reporting a constructor failure is precisely
+      // what this state exists for, and there is no render-phase alternative —
+      // the error only exists once the effect has tried to build the map.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMapError(
+        caught instanceof Error ? caught.message : "Map failed to initialise.",
+      );
+      return;
+    }
+
+    map.on("error", (event) => {
+      const message = event?.error?.message ?? "Unknown map error";
+      console.error("[map]", message, event);
+      setMapError(message);
     });
 
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
@@ -101,8 +123,32 @@ export function MapView({ posts }: { posts: FeedPost[] }) {
   }, [posts]);
 
   return (
-    <div className="relative flex-1">
-      <div ref={containerRef} className="absolute inset-0" />
+    // An explicit height, not flex-1: MapLibre measures its container on init
+    // and renders nothing at all if that measurement is zero — silently, with
+    // no error. 3.5rem is the nav (h-14).
+    //
+    // The underscores are load-bearing: Tailwind turns them into spaces, and
+    // CSS calc() requires whitespace around the minus. Written without them the
+    // declaration is invalid, gets dropped, and the height silently falls back
+    // to auto — which is exactly the 0px container that made this page blank.
+    <div className="relative h-[calc(100dvh_-_3.5rem)] w-full">
+      {/*
+        Explicit h-full/w-full rather than `absolute inset-0`. MapLibre adds
+        `.maplibregl-map` to this element, and its stylesheet — which loads
+        after Tailwind — sets `position: relative`. That beats Tailwind's
+        `absolute`, `inset-0` stops applying, and the container collapses to
+        zero height. MapLibre then renders into nothing without erroring, which
+        is a genuinely silent failure. Sizing it directly avoids the whole
+        argument.
+      */}
+      <div ref={containerRef} className="h-full w-full" />
+
+      {mapError ? (
+        <div className="bg-background absolute inset-x-4 top-4 rounded-md border px-3 py-2 text-sm shadow-sm">
+          <p className="text-destructive font-medium">Map failed to load</p>
+          <p className="text-muted-foreground mt-1 text-xs">{mapError}</p>
+        </div>
+      ) : null}
 
       {posts.length === 0 ? (
         <div className="bg-background/90 absolute inset-x-4 top-4 rounded-md border px-3 py-2 text-sm shadow-sm">

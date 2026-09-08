@@ -5,7 +5,7 @@ import { Nav } from "@/components/nav";
 import type { FeedPost } from "@/lib/posts/feed";
 import { createClient } from "@/lib/supabase/server";
 
-import { MapView } from "./map-view";
+import { MapClient } from "./map-client";
 
 export const metadata: Metadata = {
   title: "Map · Penn Free Food",
@@ -31,7 +31,7 @@ export default async function MapPage() {
   return (
     <>
       <Nav />
-      <MapView posts={(data ?? []) as FeedPost[]} />
+      <MapClient posts={(data ?? []) as FeedPost[]} />
     </>
   );
 }

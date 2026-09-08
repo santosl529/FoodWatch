@@ -268,7 +268,14 @@ This is the second instance of the same pattern (the first was `bump`, found in 
 
 **Verification**
 - `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` pass.
-- ⚠️ The map has not been opened in a browser. Tiles, marker placement, and the mini-card are all unverified.
+- ✅ Verified in a browser after three separate bugs, all of which produced an identical blank page while typecheck, lint and build stayed green.
+
+**Three silent failures behind one blank map** (worth remembering — none produced an error anywhere in the toolchain):
+1. `h-[calc(100dvh-3.5rem)]` emits `height: calc(100dvh-3.5rem)`, which is **invalid CSS** — `calc()` requires whitespace around the minus. The declaration is dropped and height falls back to `auto`, i.e. zero. Tailwind arbitrary values encode those spaces as underscores: `h-[calc(100dvh_-_3.5rem)]`.
+2. The inner container used `absolute inset-0`. MapLibre adds `.maplibregl-map` to that element and its stylesheet — loaded after Tailwind — sets `position: relative`, which wins the cascade. `inset-0` then does nothing and the container collapses. Size map containers with explicit `h-full w-full`.
+3. **The actual cause:** maplibre-gl v6 emits its web worker as a standalone `.mjs` module script, and Next's dev server answered that URL with its HTML 404 page. Strict MIME checking rejected it, so the worker never started. Vector tiles are parsed *in the worker*, so the map requested **zero** tiles — while still rendering the style's background colour, the controls, and the marker, and firing no error event. Pinned to `maplibre-gl@^5`, which inlines the worker as a blob.
+
+Diagnostic that finally worked: colouring the containers to see which one had size, after three wrong guesses. The lesson is that a blank canvas library needs the *container* proven before anything else is suspected.
 
 **Decisions / deviations**
 - **Tile provider: OpenFreeMap, Liberty style** (PRD §11 resolved). No API key, no signup, no usage limits — so nothing secret ships to the client, and a future MapLibre Native client reads the same style URL. Key-based providers (MapTiler, Stadia) gate free tiers by HTTP referrer, which native apps don't send, forcing either a proxy or an exposed key.
