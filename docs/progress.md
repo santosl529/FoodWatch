@@ -252,3 +252,26 @@ This is the second instance of the same pattern (the first was `bump`, found in 
 
 **Note**
 - The migration file briefly contained stray characters (`availability_eventsok i`) typed into the editor after it was run. The `creator_close` test passing confirms the original run applied cleanly. Fixed in place.
+
+---
+
+## Step 6 — Map
+
+### 6a — Map of active posts (done, pending browser check)
+
+**What was built**
+- `lib/map/config.ts` — style URL, campus centre, zoom levels. Provider/style swap is a one-line change here.
+- `app/map/map-view.tsx` — MapLibre map with a marker per active post, navigation + geolocate controls, and a mini-card on tap linking to detail (PRD §5.5).
+- `app/map/page.tsx` — uses the **same `feed_posts` RPC** as the feed, so "active" means exactly what it means there, including lazy MAX_AGE expiry.
+- Map link added to the nav.
+- `maplibre-gl` added as a dependency (approved).
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` pass.
+- ⚠️ The map has not been opened in a browser. Tiles, marker placement, and the mini-card are all unverified.
+
+**Decisions / deviations**
+- **Tile provider: OpenFreeMap, Liberty style** (PRD §11 resolved). No API key, no signup, no usage limits — so nothing secret ships to the client, and a future MapLibre Native client reads the same style URL. Key-based providers (MapTiler, Stadia) gate free tiers by HTTP referrer, which native apps don't send, forcing either a proxy or an exposed key.
+- Markers are DOM elements rather than a GeoJSON symbol layer: at tens of posts performance is irrelevant, and DOM markers take the app's own Tailwind tokens. Each pin shows its servings count, which is more useful at a glance than a generic icon — and avoids injecting SVG markup via `innerHTML`.
+- 3D (extruded buildings, pitch) deliberately not used: it makes distance harder to judge, competes with the pins, and costs performance on the mid-range phones this is for.
+- maplibre-gl v6 is ESM with **named exports only**; there is no default export. Typecheck caught this.

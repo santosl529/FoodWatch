@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { UtensilsCrossed } from "lucide-react";
+import { Map as MapIcon, UtensilsCrossed } from "lucide-react";
 
 import { UserMenu } from "@/components/user-menu";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,13 @@ export async function Nav() {
         </Link>
 
         {user ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/map" aria-label="Map">
+                <MapIcon className="size-4" />
+                <span className="hidden sm:inline">Map</span>
+              </Link>
+            </Button>
             <Button asChild size="sm">
               <Link href="/post/new">Post food</Link>
             </Button>
