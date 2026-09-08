@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Map as MapIcon, UtensilsCrossed } from "lucide-react";
 
+import { NotificationBell } from "@/components/notification-bell";
 import { UserMenu } from "@/components/user-menu";
 import { Button } from "@/components/ui/button";
+import type { AppNotification } from "@/lib/notifications/state";
 import { createClient } from "@/lib/supabase/server";
 
 export async function Nav() {
@@ -14,6 +16,7 @@ export async function Nav() {
   // `display_name` is defaulted to the email local-part by the handle_new_user
   // trigger, so it is normally set; fall back anyway rather than render blank.
   let displayName: string | null = null;
+  let notifications: AppNotification[] = [];
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -23,6 +26,14 @@ export async function Nav() {
 
     displayName =
       profile?.display_name ?? user.email?.split("@")[0] ?? "Account";
+
+    // RLS limits this to the caller's own notifications.
+    const { data: rows } = await supabase
+      .from("notifications")
+      .select("id, post_id, type, body, read, created_at")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    notifications = (rows ?? []) as AppNotification[];
   }
 
   return (
@@ -44,6 +55,10 @@ export async function Nav() {
             <Button asChild size="sm">
               <Link href="/post/new">Post food</Link>
             </Button>
+            <NotificationBell
+              userId={user.id}
+              initialNotifications={notifications}
+            />
             <UserMenu
               displayName={displayName ?? "Account"}
               email={user.email ?? ""}

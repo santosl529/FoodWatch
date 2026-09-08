@@ -6,7 +6,7 @@
  * of these tests exist to prove a poster cannot reach someone who did not ask
  * to hear from them.
  */
-import { after, before, describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { createPost, createUser, deleteUser, rest } from "./helpers.mjs";

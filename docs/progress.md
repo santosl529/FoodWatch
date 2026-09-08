@@ -325,3 +325,21 @@ Recipients are computed inside a `SECURITY DEFINER` trigger purely from each rec
 
 **Flaky test found and fixed**
 The first run failed two assertions, the second passed. Cause: `node --test` runs test files in **parallel processes** against one shared database, and the lifecycle suite creates posts at Penn's coordinates — which matched radius preferences registered by the notification suite, leaking notifications across files. Fixed by anchoring the notification suite's geography far from campus and adding `--test-concurrency=1`. Worth remembering: integration suites sharing a real database are only isolated if their *fixtures* cannot see each other.
+
+### 8b — Settings UI + notification bell (done, pending browser check)
+
+**What was built**
+- `app/actions/notifications.ts` — `saveNotificationSettings` (upserts the caller's own row; `user_id` comes from the session, never the form) and `markNotificationsRead`.
+- `app/settings/notifications/` — page, client wrapper, and form: radius, map-picked centre (reusing `LocationPicker`), watched buildings, require/exclude tag pickers, and the comment toggle.
+- `components/notification-bell.tsx` — nav bell with an unread badge, realtime INSERT subscription filtered to the user, and a dropdown list linking to each post.
+- `lib/notifications/state.ts`, `lib/geo/ewkb.ts`.
+
+**Verification**
+- `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (25) all pass.
+- ⚠️ Not exercised in a browser: saving preferences, the realtime badge, and mark-read on open.
+
+**Decisions / deviations**
+- **EWKB decoded in TypeScript** rather than adding an RPC. PostgREST returns geography as hex and offers no way to ask for plain coordinates; `parseEwkbPoint` reads the two floats directly, saving a migration round-trip for a two-number lookup.
+- **Mark-all-read on opening the dropdown**, rather than per-item read state. The badge answers "anything new since I looked", and per-item tracking is bookkeeping this doesn't earn yet.
+- The "where to watch" card states plainly that configuring neither a radius nor a building means no new-post notifications — otherwise 8a's deliberate silence reads as a bug.
+- `next/dynamic` with `ssr: false` is rejected inside a Server Component, so the settings form needs a client wrapper exactly like the map did. **Typecheck and lint both passed this; only `npm run build` caught it.**
