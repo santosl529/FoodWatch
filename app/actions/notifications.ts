@@ -30,8 +30,6 @@ const optionalNumber = (schema: z.ZodType<number>) =>
 
 const settingsSchema = z.object({
   radiusMeters: optionalNumber(z.coerce.number().int().min(50).max(5000)),
-  latitude: optionalNumber(z.coerce.number().min(-90).max(90)),
-  longitude: optionalNumber(z.coerce.number().min(-180).max(180)),
   buildingLabels: z.string().max(500).optional(),
   require: z.array(tagSchema).max(12),
   exclude: z.array(tagSchema).max(12),
@@ -53,8 +51,6 @@ export async function saveNotificationSettings(
 
   const parsed = settingsSchema.safeParse({
     radiusMeters: String(formData.get("radiusMeters") ?? ""),
-    latitude: String(formData.get("latitude") ?? ""),
-    longitude: String(formData.get("longitude") ?? ""),
     buildingLabels: String(formData.get("buildingLabels") ?? ""),
     require: formData.getAll("require"),
     exclude: formData.getAll("exclude"),
@@ -68,8 +64,7 @@ export async function saveNotificationSettings(
     };
   }
 
-  const { radiusMeters, latitude, longitude } = parsed.data;
-  const hasCenter = latitude != null && longitude != null;
+  const { radiusMeters } = parsed.data;
 
   const buildingLabels = (parsed.data.buildingLabels ?? "")
     .split(",")
@@ -87,7 +82,9 @@ export async function saveNotificationSettings(
     {
       user_id: user.id,
       radius_meters: radiusMeters ?? null,
-      center: hasCenter ? `SRID=4326;POINT(${longitude} ${latitude})` : null,
+      // `center` is deliberately absent: it's the viewer's live position,
+      // written by saveViewerLocation. Omitting it from the upsert leaves it
+      // untouched rather than nulling it.
       building_labels: buildingLabels,
       dietary_filter: dietaryFilter,
       notify_on_comment: parsed.data.notifyOnComment,
@@ -101,6 +98,43 @@ export async function saveNotificationSettings(
 
   revalidatePath("/settings/notifications");
   return { error: null, saved: true };
+}
+
+const viewerLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+
+/**
+ * Saves where the viewer is as their notification centre, so the server's
+ * radius check measures from the same point the map draws the circle around
+ * (9h). Called by the feed and map, throttled client-side. The web can't track
+ * position in the background, so this is "where you last had the app open".
+ *
+ * Only `user_id` + `center` are sent: the upsert then updates just `center`,
+ * leaving radius, buildings and filters alone (covered by a test).
+ */
+export async function saveViewerLocation(coords: {
+  latitude: number;
+  longitude: number;
+}): Promise<void> {
+  const parsed = viewerLocationSchema.safeParse(coords);
+  if (!parsed.success) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { latitude, longitude } = parsed.data;
+  await supabase.from("notification_preferences").upsert(
+    {
+      user_id: user.id,
+      center: `SRID=4326;POINT(${longitude} ${latitude})`,
+    },
+    { onConflict: "user_id" },
+  );
 }
 
 export async function markNotificationsRead(): Promise<void> {

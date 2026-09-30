@@ -457,3 +457,24 @@ Starts empty. OSM already has formal names ("John M. Huntsman Hall", "Levine Hal
 `supabase/migrations/0011_building_match_ignores_details.sql` changes only the building clause of `notify_on_new_post`: it now compares the watched name against `split_part(location_label, ' · ', 1)`. It used to compare against the whole label, so after 9f watching "Levine Hall" missed "Levine Hall · room 101". Labels with no separator still match whole. New test in `test/notifications.test.mjs`; 43/43 pass.
 
 Known gap: watch-list entries must use the canonical name posts store, so nicknames like "JMHH" don't match until settings gets the same autofill.
+
+### 9h — Notification radius follows the viewer (server side too)
+
+**The bug**
+Since 9e the map drew the radius circle around the viewer's live position, but `notify_on_new_post` still measured from `notification_preferences.center`, which was picked on the settings map. Anyone away from their saved point saw a circle that didn't match what they were notified about.
+
+**What changed**
+- `saveViewerLocation` (in `app/actions/notifications.ts`) upserts only `user_id` + `center`, with `user_id` taken from the session. It's called from the feed's one-shot location fix and the map's `watchPosition` via `lib/geo/report-viewer-location.ts`.
+- The throttle is `lib/geo/viewer-location.ts`, pure and unit-tested. It saves on the first fix, after a move of 150 m or more, or once 10 minutes have passed. Its memory lives in `localStorage`, so the feed and map share it.
+- Settings no longer has a centre picker, and `saveNotificationSettings` leaves `center` out of its upsert so a settings save can't wipe it. Radius copy now reads "Measured from where you last had the app open".
+- No migration. If a radius is set but no centre has been saved yet, the 0010 trigger treats that as "nothing configured" and notifies about everything, which is the right fallback.
+
+**Tests**
+- `test/viewer-location.test.mjs`: 5 unit tests.
+- Two integration tests in `test/notifications.test.mjs`, running as real signed-in users: a centre-only upsert keeps an existing radius, and own-row RLS rejects writing another user's centre. Both passed on the first run, since they pin down existing database behaviour the action depends on. 50/50 pass.
+
+**Notes**
+- Privacy: this stores each user's last-known position. Only they can read it under RLS, but it's visible to the secret key and admins in the dashboard. The owner accepted this.
+- The throttle memory is per device, not per user. If a second account signs in on the same browser within 10 minutes and hasn't moved, its first save is skipped until the next move or interval.
+- `lib/geo/ewkb.ts` has no callers any more.
+- ⚠️ Not verified on a phone yet: it needs iOS Safari location enabled (Settings → Privacy & Security → Location Services → Safari Websites).

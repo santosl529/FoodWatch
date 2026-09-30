@@ -6,7 +6,6 @@ import type {
   DietaryFilter,
   NotificationPreferences,
 } from "@/lib/notifications/state";
-import { parseEwkbPoint } from "@/lib/geo/ewkb";
 import { createClient } from "@/lib/supabase/server";
 
 import { NotificationSettingsClient } from "./settings-client";
@@ -28,19 +27,14 @@ export default async function NotificationSettingsPage() {
   const { data: row } = await supabase
     .from("notification_preferences")
     .select(
-      "radius_meters, center, building_labels, dietary_filter, notify_on_comment",
+      "radius_meters, building_labels, dietary_filter, notify_on_comment",
     )
     .eq("user_id", user.id)
     .maybeSingle();
 
-  // PostgREST returns geography as EWKB hex; decode rather than add an RPC.
-  const center = parseEwkbPoint(row?.center as string | null);
-
   const preferences: NotificationPreferences | null = row
     ? {
         radius_meters: row.radius_meters,
-        latitude: center?.latitude ?? null,
-        longitude: center?.longitude ?? null,
         building_labels: row.building_labels ?? [],
         dietary_filter: (row.dietary_filter ?? {}) as DietaryFilter,
         notify_on_comment: row.notify_on_comment,

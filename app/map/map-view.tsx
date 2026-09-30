@@ -20,6 +20,7 @@ import {
   MAP_STYLE_URL,
 } from "@/lib/map/config";
 import { circlePolygon } from "@/lib/geo/circle";
+import { reportViewerLocation } from "@/lib/geo/report-viewer-location";
 import { distanceLabel, photoUrl, timeAgo, type FeedPost } from "@/lib/posts/feed";
 
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -153,6 +154,8 @@ export function MapView({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           };
+          // Keeps the server's radius check centred where the circle is drawn.
+          reportViewerLocation(lastPositionRef.current);
           // No-ops if the style hasn't finished loading; the load handler
           // draws it then.
           drawRadius();

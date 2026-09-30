@@ -6,6 +6,7 @@ import { MapPin, UtensilsCrossed } from "lucide-react";
 
 import { PostCard } from "@/components/post-card";
 import { Button } from "@/components/ui/button";
+import { reportViewerLocation } from "@/lib/geo/report-viewer-location";
 import { createClient } from "@/lib/supabase/client";
 import type { FeedPost } from "@/lib/posts/feed";
 
@@ -37,6 +38,10 @@ export function FeedList({ initialPosts }: { initialPosts: FeedPost[] }) {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        reportViewerLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
         const supabase = createClient();
         const { data, error } = await supabase.rpc("feed_posts", {
           user_lat: position.coords.latitude,

@@ -98,7 +98,7 @@ Behavioral specs only — component/layout choices belong to the agent.
 ### 5.6 Notification settings (`/settings/notifications`) — core (UI), partial delivery
 - **Default: notified about every new post** on campus, with no setup (a user with no preferences row included). This mirrors the group chat it replaces, where everyone saw everything. The preferences below *narrow* that default rather than enable it.
 - User-configurable preferences (all of the following are customizable):
-  - **Radius / distance** from a chosen point within which they want to be notified of new posts. (The map draws the radius around the viewer's live position; the server matches against the saved centre.)
+  - **Radius / distance** from the viewer's own position within which they want to be notified of new posts. The feed and map save the viewer's position as their centre (throttled: on a ~150 m move or every 10 min), so the server check and the map's circle agree. The web can't track position in the background, so this means "where you last had the app open". Until a position has been saved, a radius has no effect and the user hears about everything.
   - **Dietary/allergen filters** — `{"require": [...], "exclude": [...]}`: notify only for posts carrying every required tag and none of the excluded ones. Applies unconditionally, including under the notify-everything default.
   - **Specific buildings/locations** — opt into notifications for chosen buildings (case-insensitive match against a post's location label).
   - **Comment/reply notifications** on the user's own posts (on by default).
@@ -241,7 +241,7 @@ Conventions: UUID primary keys, `timestamptz` for all times, PostGIS `geography(
 ### `notification_preferences`
 - `user_id` uuid PK/FK → profiles.id
 - `radius_meters` int (nullable)
-- `center` geography(Point) (nullable) — what the server's radius check uses
+- `center` geography(Point) (nullable) — the viewer's last-known position, written by the app (not user-picked); what the server's radius check uses
 - `building_labels` text[] (opt-in buildings)
 - `dietary_filter` jsonb — `{"require": [...], "exclude": [...]}`; `{}` matches everything
 - `notify_on_comment` bool default true

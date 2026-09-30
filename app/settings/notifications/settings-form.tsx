@@ -5,7 +5,6 @@ import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "lucide-react";
 
 import { saveNotificationSettings } from "@/app/actions/notifications";
-import { LocationPicker, type Coords } from "@/components/location-picker";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +15,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CAMPUS_CENTER } from "@/lib/map/config";
 import { cn } from "@/lib/utils";
 import {
   initialNotificationSettingsState,
@@ -90,14 +88,6 @@ export function NotificationSettingsForm({
     initialNotificationSettingsState,
   );
 
-  // Default to campus centre rather than null. The picker renders a pin there
-  // regardless, and a user quite reasonably reads that pin as their choice —
-  // leaving the value unset is how an unmoved pin silently became (0, 0).
-  const [coords, setCoords] = useState<Coords>(
-    preferences?.latitude != null && preferences?.longitude != null
-      ? { latitude: preferences.latitude, longitude: preferences.longitude }
-      : { latitude: CAMPUS_CENTER.latitude, longitude: CAMPUS_CENTER.longitude },
-  );
   const [require, setRequire] = useState<Tag[]>(
     preferences?.dietary_filter?.require ?? [],
   );
@@ -133,11 +123,11 @@ export function NotificationSettingsForm({
               defaultValue={preferences?.radius_meters ?? ""}
               className="max-w-40"
             />
+            <p className="text-muted-foreground text-xs">
+              Measured from where you last had the app open, with location on.
+              Until then, you hear about everything.
+            </p>
           </div>
-
-          <input type="hidden" name="latitude" value={coords?.latitude ?? ""} />
-          <input type="hidden" name="longitude" value={coords?.longitude ?? ""} />
-          <LocationPicker value={coords} onChange={setCoords} />
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="buildingLabels">Buildings to watch</Label>

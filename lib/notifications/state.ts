@@ -28,8 +28,6 @@ export type DietaryFilter = {
 
 export type NotificationPreferences = {
   radius_meters: number | null;
-  latitude: number | null;
-  longitude: number | null;
   building_labels: string[];
   dietary_filter: DietaryFilter;
   notify_on_comment: boolean;

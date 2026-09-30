@@ -9,7 +9,15 @@
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createPost, createUser, deleteUser, rest } from "./helpers.mjs";
+import {
+  asUser,
+  createPost,
+  createUser,
+  deleteUser,
+  rest,
+  sessionFor,
+  url,
+} from "./helpers.mjs";
 
 /**
  * Deliberately NOT Penn's coordinates.
@@ -214,6 +222,57 @@ describe("notification fan-out", () => {
       1,
       "the room suffix should not stop a building match",
     );
+  });
+
+  // 9h: the app saves the viewer's live position as their centre with an
+  // upsert of just `user_id` + `center`, as the signed-in user.
+  it("saving only a centre keeps an existing radius", async () => {
+    const viewer = await newUser("liveviewer");
+    await setPreferences(viewer.id, { radius_meters: 800 });
+    const token = await sessionFor(viewer.email);
+
+    const response = await fetch(`${url}/rest/v1/notification_preferences`, {
+      method: "POST",
+      headers: { ...asUser(token), Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        user_id: viewer.id,
+        center: `SRID=4326;POINT(${ORIGIN.lng} ${ORIGIN.lat})`,
+      }),
+    });
+    assert.ok(response.ok, await response.text());
+
+    const [row] = await rest(
+      `notification_preferences?user_id=eq.${viewer.id}&select=radius_meters,center`,
+    );
+    assert.equal(row.radius_meters, 800, "the radius must survive a centre save");
+    assert.ok(row.center, "the centre should be saved");
+  });
+
+  it("does not let a student overwrite someone else's centre", async () => {
+    const victim = await newUser("centrevictim");
+    const attacker = await newUser("centreattacker");
+    await setPreferences(victim.id, {
+      center: `SRID=4326;POINT(${ORIGIN.lng} ${ORIGIN.lat})`,
+      radius_meters: 500,
+    });
+    const before = await rest(
+      `notification_preferences?user_id=eq.${victim.id}&select=center`,
+    );
+    const token = await sessionFor(attacker.email);
+
+    await fetch(`${url}/rest/v1/notification_preferences`, {
+      method: "POST",
+      headers: { ...asUser(token), Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        user_id: victim.id,
+        center: `SRID=4326;POINT(${FAR.lng} ${FAR.lat})`,
+      }),
+    });
+
+    const after = await rest(
+      `notification_preferences?user_id=eq.${victim.id}&select=center`,
+    );
+    assert.deepEqual(after, before, "own-row RLS must reject the write");
   });
 
   it("notifies the post creator of a comment, but not the commenter", async () => {
