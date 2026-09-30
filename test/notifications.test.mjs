@@ -198,6 +198,24 @@ describe("notification fan-out", () => {
     );
   });
 
+  it("matches a watched building when the label carries room details", async () => {
+    const poster = await newUser("poster6b");
+    const watcher = await newUser("watcher2");
+    await setPreferences(watcher.id, { building_labels: ["levine hall"] });
+
+    // The create form composes "<place> · <details>" (9f).
+    const post = await newPost(poster.id, {
+      description: "lifecycle-test building match with details",
+      location_label: "Levine Hall · room 101",
+    });
+
+    assert.equal(
+      (await notificationsFor(watcher.id, { postId: post.id })).length,
+      1,
+      "the room suffix should not stop a building match",
+    );
+  });
+
   it("notifies the post creator of a comment, but not the commenter", async () => {
     const creator = await newUser("creator");
     const commenter = await newUser("commenter");

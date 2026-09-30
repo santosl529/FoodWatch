@@ -451,3 +451,9 @@ Starts empty. OSM already has formal names ("John M. Huntsman Hall", "Levine Hal
 
 **Testing**
 `test/places.test.mjs` has 11 pure unit tests. Node 26 strips TS types on import, so the tests import `lib/places/*.ts` directly. That's why the pure modules use relative, type-only imports and no `@/` aliases (Node can't resolve those). `search.ts` imports `@/lib/map/config` and is deliberately not imported by tests. Node prints a harmless `MODULE_TYPELESS_PACKAGE_JSON` warning for these files.
+
+### 9g — Fix: watched buildings ignore the room suffix
+
+`supabase/migrations/0011_building_match_ignores_details.sql` changes only the building clause of `notify_on_new_post`: it now compares the watched name against `split_part(location_label, ' · ', 1)`. It used to compare against the whole label, so after 9f watching "Levine Hall" missed "Levine Hall · room 101". Labels with no separator still match whole. New test in `test/notifications.test.mjs`; 43/43 pass.
+
+Known gap: watch-list entries must use the canonical name posts store, so nicknames like "JMHH" don't match until settings gets the same autofill.
