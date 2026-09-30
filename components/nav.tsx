@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Map as MapIcon, UtensilsCrossed } from "lucide-react";
+import { List, Map as MapIcon, UtensilsCrossed } from "lucide-react";
 
 import { NotificationBell } from "@/components/notification-bell";
 import { UserMenu } from "@/components/user-menu";
@@ -48,6 +48,12 @@ export async function Nav() {
 
         {user ? (
           <div className="flex items-center gap-1 sm:gap-2">
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/feed" aria-label="Feed">
+                <List className="size-4" />
+                <span className="hidden sm:inline">Feed</span>
+              </Link>
+            </Button>
             <Button asChild size="sm" variant="ghost">
               <Link href="/map" aria-label="Map">
                 <MapIcon className="size-4" />
