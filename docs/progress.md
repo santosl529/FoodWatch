@@ -414,3 +414,24 @@ Two mistakes compounded:
 
 **Post form note**
 `app/post/new` deliberately still requires an explicit pin placement. Defaulting a post's location to campus centre would put food at the wrong place on the map, which is worse than making someone tap once.
+
+### 9e — Notify about everything by default; radius follows the viewer
+
+**What changed**
+- `supabase/migrations/0010_notify_everything.sql` **reverses the 0008 default**. No location configured — including no preferences row at all — now means notified about every post, subject to the dietary filter. A radius or watched buildings *narrow* that rather than enabling it.
+- The map's radius circle is drawn around the viewer's **live position**, not the centre stored in settings. Only `radius_meters` is read now.
+- Settings copy updated: "By default you hear about every post on campus."
+
+**Why the reversal**
+This app replaces a group chat where everyone saw every message, on a campus small enough that "everything" is a reasonable amount. Silence-by-default meant a student who never opened settings — most of them — got nothing from the feature. The trigger now drives from `profiles` rather than `notification_preferences`, since the people it exists for have no preferences row.
+
+**The dietary filter still applies unconditionally.** Allergen avoidance is not a preference a default should override.
+
+**Bug fixed: circle disappeared on reload**
+A race. The GeoJSON source is created on the map's `load` event, but `watchPosition` with `maximumAge` can return a *cached* fix before the style is ready — and if the viewer then stays put, it may not fire again for minutes, so nothing ever drew. The last position is now remembered and the circle drawn by whichever of the two completes second.
+
+**Test isolation broke, correctly**
+One test failed after 0010: since every post now notifies every user, "the commenter received nothing" was false — they had a `nearby_post` from the fixture. The tests had been relying on "this user receives nothing else", which the new default invalidates. Assertions are now scoped by `post_id` and `type` rather than counting a user's whole inbox. Worth remembering: a count-based assertion against shared state is really an assertion about everything else in the suite.
+
+**Note**
+`0010_notify_everything.sql` was accidentally overwritten in the editor with a single character and restored from this session. It is untracked until committed, so git could not have recovered it — the same near-miss as the stray text in 0007.

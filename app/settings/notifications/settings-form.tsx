@@ -115,14 +115,13 @@ export function NotificationSettingsForm({
         <CardHeader>
           <CardTitle className="text-base">Where to watch</CardTitle>
           <CardDescription>
-            Set a radius, a list of buildings, or both. With neither, you
-            won&apos;t get any new-post notifications — comment replies still
-            reach you.
+            By default you hear about every post on campus. Set a radius, a list
+            of buildings, or both to narrow it down.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="radiusMeters">Notify me within (metres)</Label>
+            <Label htmlFor="radiusMeters">Only within (metres)</Label>
             <Input
               id="radiusMeters"
               name="radiusMeters"

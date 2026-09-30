@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 // maplibre-gl v6 is ESM with named exports only — there is no default export.
+import type maplibregl from "maplibre-gl";
 import {
   GeolocateControl,
   LngLatBounds,
@@ -31,23 +32,21 @@ import "maplibre-gl/dist/maplibre-gl.css";
  * be styled with the same Tailwind tokens as the rest of the app. Revisit if
  * this ever needs to draw thousands.
  */
-export type NotifyArea = {
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-};
-
 export function MapView({
   posts,
-  notifyArea,
+  radiusMeters,
 }: {
   posts: FeedPost[];
-  notifyArea: NotifyArea | null;
+  /** From notification settings; the circle drawn around the viewer. */
+  radiusMeters: number | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const userMarkerRef = useRef<Marker | null>(null);
+  const lastPositionRef = useRef<{ latitude: number; longitude: number } | null>(
+    null,
+  );
   const [selected, setSelected] = useState<FeedPost | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -92,33 +91,51 @@ export function MapView({
       "top-right",
     );
 
+    /**
+     * Draws the radius around the last known position.
+     *
+     * Called from both the style-load handler and the geolocation callback,
+     * because either can happen first: `watchPosition` with `maximumAge` can
+     * return a cached fix before the style is ready, and if the viewer then
+     * doesn't move, it may not fire again for minutes. Drawing only from the
+     * geolocation callback meant the circle silently never appeared.
+     */
+    function drawRadius() {
+      const position = lastPositionRef.current;
+      if (!position || !radiusMeters || radiusMeters <= 0) return;
+      const source = map.getSource("radius-area");
+      if (!source || !("setData" in source)) return;
+      (source as maplibregl.GeoJSONSource).setData(
+        circlePolygon(position, radiusMeters),
+      );
+    }
+
     // Sources and layers can only be added after the style has loaded.
     map.on("load", () => {
-      if (notifyArea && notifyArea.radiusMeters > 0) {
-        map.addSource("notify-area", {
-          type: "geojson",
-          data: circlePolygon(
-            { latitude: notifyArea.latitude, longitude: notifyArea.longitude },
-            notifyArea.radiusMeters,
-          ),
-        });
-        map.addLayer({
-          id: "notify-area-fill",
-          type: "fill",
-          source: "notify-area",
-          paint: { "fill-color": "#2563eb", "fill-opacity": 0.08 },
-        });
-        map.addLayer({
-          id: "notify-area-outline",
-          type: "line",
-          source: "notify-area",
-          paint: {
-            "line-color": "#2563eb",
-            "line-width": 1.5,
-            "line-dasharray": [2, 2],
-          },
-        });
-      }
+      if (!radiusMeters || radiusMeters <= 0) return;
+      map.addSource("radius-area", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "radius-area-fill",
+        type: "fill",
+        source: "radius-area",
+        paint: { "fill-color": "#2563eb", "fill-opacity": 0.08 },
+      });
+      map.addLayer({
+        id: "radius-area-outline",
+        type: "line",
+        source: "radius-area",
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 1.5,
+          "line-dasharray": [2, 2],
+        },
+      });
+
+      // The position may already have arrived while the style was loading.
+      drawRadius();
     });
 
     // A live dot for the viewer. GeolocateControl can do this, but only after
@@ -132,6 +149,14 @@ export function MapView({
             position.coords.longitude,
             position.coords.latitude,
           ];
+          lastPositionRef.current = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          // No-ops if the style hasn't finished loading; the load handler
+          // draws it then.
+          drawRadius();
+
           if (userMarkerRef.current) {
             userMarkerRef.current.setLngLat(lngLat);
             return;
@@ -158,7 +183,7 @@ export function MapView({
       map.remove();
       mapRef.current = null;
     };
-  }, [notifyArea]);
+  }, [radiusMeters]);
 
   useEffect(() => {
     const map = mapRef.current;

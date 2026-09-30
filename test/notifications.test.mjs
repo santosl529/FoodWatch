@@ -32,8 +32,16 @@ async function setPreferences(userId, prefs) {
   });
 }
 
-async function notificationsFor(userId) {
-  return rest(`notifications?user_id=eq.${userId}&select=*&order=created_at.desc`);
+/**
+ * Since 0010, every post notifies every user by default, so a bare count for a
+ * user is no longer a statement about one post — fixtures created later in the
+ * suite land in the same inbox. Scope assertions by post and/or type.
+ */
+async function notificationsFor(userId, { postId, type } = {}) {
+  const filters = [`user_id=eq.${userId}`];
+  if (postId) filters.push(`post_id=eq.${postId}`);
+  if (type) filters.push(`type=eq.${type}`);
+  return rest(`notifications?${filters.join("&")}&select=*&order=created_at.desc`);
 }
 
 describe("notification fan-out", () => {
@@ -72,7 +80,7 @@ describe("notification fan-out", () => {
 
     const post = await newPost(poster.id, { description: "lifecycle-test radius hit" });
 
-    const received = await notificationsFor(nearby.id);
+    const received = await notificationsFor(nearby.id, { postId: post.id });
     assert.equal(received.length, 1);
     assert.equal(received[0].type, "nearby_post");
     assert.equal(received[0].post_id, post.id);
@@ -86,9 +94,9 @@ describe("notification fan-out", () => {
       radius_meters: 500,
     });
 
-    await newPost(poster.id, { description: "lifecycle-test radius miss" });
+    const post = await newPost(poster.id, { description: "lifecycle-test radius miss" });
 
-    assert.equal((await notificationsFor(far.id)).length, 0);
+    assert.equal((await notificationsFor(far.id, { postId: post.id })).length, 0);
   });
 
   it("never notifies the poster about their own post", async () => {
@@ -98,22 +106,35 @@ describe("notification fan-out", () => {
       radius_meters: 5000,
     });
 
-    await newPost(poster.id, { description: "lifecycle-test own post" });
+    const post = await newPost(poster.id, { description: "lifecycle-test own post" });
 
-    assert.equal((await notificationsFor(poster.id)).length, 0);
+    assert.equal((await notificationsFor(poster.id, { postId: post.id })).length, 0);
   });
 
-  it("stays silent for a user who has configured no location at all", async () => {
+  it("notifies a user who has configured nothing about everything (0010)", async () => {
     const poster = await newUser("poster3");
     const unconfigured = await newUser("unconfigured");
     await setPreferences(unconfigured.id, { notify_on_comment: true });
 
-    await newPost(poster.id, { description: "lifecycle-test unconfigured" });
+    const post = await newPost(poster.id, { description: "lifecycle-test unconfigured" });
 
     assert.equal(
-      (await notificationsFor(unconfigured.id)).length,
-      0,
-      "no radius and no buildings should mean silence, not everything",
+      (await notificationsFor(unconfigured.id, { postId: post.id })).length,
+      1,
+      "no radius and no buildings now means everything, not silence",
+    );
+  });
+
+  it("notifies a user with no preferences row at all", async () => {
+    const poster = await newUser("poster3b");
+    const brandNew = await newUser("nopreferences");
+
+    const post = await newPost(poster.id, { description: "lifecycle-test no prefs row" });
+
+    assert.equal(
+      (await notificationsFor(brandNew.id, { postId: post.id })).length,
+      1,
+      "a student who never opened settings should still hear about food",
     );
   });
 
@@ -126,13 +147,13 @@ describe("notification fan-out", () => {
       dietary_filter: { exclude: ["contains-nuts"] },
     });
 
-    await newPost(poster.id, {
+    const post = await newPost(poster.id, {
       description: "lifecycle-test peanut brittle",
       dietary_tags: ["snacks", "contains-nuts"],
     });
 
     assert.equal(
-      (await notificationsFor(allergic.id)).length,
+      (await notificationsFor(allergic.id, { postId: post.id })).length,
       0,
       "a post carrying an excluded allergen tag must not notify",
     );
@@ -147,17 +168,17 @@ describe("notification fan-out", () => {
       dietary_filter: { require: ["vegan"] },
     });
 
-    await newPost(poster.id, {
+    const nonVegan = await newPost(poster.id, {
       description: "lifecycle-test not vegan",
       dietary_tags: ["meal"],
     });
-    assert.equal((await notificationsFor(vegan.id)).length, 0);
+    assert.equal((await notificationsFor(vegan.id, { postId: nonVegan.id })).length, 0);
 
-    await newPost(poster.id, {
+    const veganPost = await newPost(poster.id, {
       description: "lifecycle-test vegan bowl",
       dietary_tags: ["meal", "vegan"],
     });
-    assert.equal((await notificationsFor(vegan.id)).length, 1);
+    assert.equal((await notificationsFor(vegan.id, { postId: veganPost.id })).length, 1);
   });
 
   it("matches on a watched building even with no radius set", async () => {
@@ -165,13 +186,13 @@ describe("notification fan-out", () => {
     const watcher = await newUser("watcher");
     await setPreferences(watcher.id, { building_labels: ["towne 100"] });
 
-    await newPost(poster.id, {
+    const post = await newPost(poster.id, {
       description: "lifecycle-test building match",
       location_label: "Towne 100",
     });
 
     assert.equal(
-      (await notificationsFor(watcher.id)).length,
+      (await notificationsFor(watcher.id, { postId: post.id })).length,
       1,
       "building match should be case-insensitive",
     );
@@ -191,10 +212,14 @@ describe("notification fan-out", () => {
       }),
     });
 
-    const forCreator = await notificationsFor(creator.id);
+    const forCreator = await notificationsFor(creator.id, { type: "comment" });
     assert.equal(forCreator.length, 1);
-    assert.equal(forCreator[0].type, "comment");
-    assert.equal((await notificationsFor(commenter.id)).length, 0);
+    assert.equal(forCreator[0].post_id, post.id);
+    assert.equal(
+      (await notificationsFor(commenter.id, { type: "comment" })).length,
+      0,
+      "the commenter should get no comment notification of their own",
+    );
   });
 
   it("does not notify the creator about their own comment", async () => {
@@ -210,7 +235,7 @@ describe("notification fan-out", () => {
       }),
     });
 
-    assert.equal((await notificationsFor(creator.id)).length, 0);
+    assert.equal((await notificationsFor(creator.id, { type: "comment" })).length, 0);
   });
 
   it("respects notify_on_comment = false", async () => {
@@ -228,6 +253,6 @@ describe("notification fan-out", () => {
       }),
     });
 
-    assert.equal((await notificationsFor(creator.id)).length, 0);
+    assert.equal((await notificationsFor(creator.id, { type: "comment" })).length, 0);
   });
 });
