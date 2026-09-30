@@ -436,7 +436,7 @@ One test failed after 0010: since every post now notifies every user, "the comme
 **Note**
 `0010_notify_everything.sql` was accidentally overwritten in the editor with a single character and restored from this session. It is untracked until committed, so git could not have recovered it — the same near-miss as the stray text in 0007.
 
-### 9f — Location autofill on the create form (done, pending browser check)
+### 9f — Location autofill on the create form (done)
 
 **What changed**
 - The free-text "Building or room" input is replaced by `components/location-search.tsx`: search as you type (≥3 chars, 300 ms debounce, in-flight requests aborted). Picking a suggestion locks it as a chip (✕ to change) and moves the map pin, which stays draggable. An optional "Room, floor or details" field is appended to the label as `Name · details`, and its `maxLength` is sized so the result stays inside the server's 120-char limit.
