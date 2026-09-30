@@ -24,7 +24,8 @@
 - **Styling/UI:** Tailwind CSS + shadcn/ui components.
 - **Hosting:** Vercel.
 - **Backend / DB / Auth / Storage / Realtime:** Supabase (Postgres, Supabase Auth, Supabase Storage for photos, Supabase Realtime for live comments and availability updates). Use the **PostGIS** extension for location queries.
-- **Map:** **MapLibre GL JS** (free/open) for the MVP. Tiles from a free provider (e.g. a free MapLibre-compatible tile source); the specific tile provider is an open question (see §11).
+- **Map:** **MapLibre GL JS** (free/open), pinned to v5 (v6's standalone worker module breaks under Next's dev server — see progress.md 6a). Tiles: **OpenFreeMap, Liberty style** — no API key, no signup, no usage limits (decided; see §11).
+- **Geocoding:** **Photon** (komoot, OpenStreetMap-based) for address/building autofill on the create form — keyless, built for search-as-you-type, called from the browser (no secret involved). See §6.4.
 - **AI:** **OpenRouter** for the vision classifier (photo → food description, dietary/allergen tags, serving estimate). Model is a vision-capable model selected at build time (open question §11). All AI calls happen **server-side only** (route handler or server action); the OpenRouter key never reaches the client.
 
 **Supabase key conventions (non-negotiable):**
@@ -54,7 +55,9 @@ No organizational/poster hierarchy beyond this. A post's creator has a couple of
 - **Domain gate:** Only `@upenn.edu` emails may complete signup. **This must be enforced server-side** (Supabase auth hook / database trigger / server-side check at the auth boundary), not merely validated in the client. Client-side validation is a UX nicety; the server check is the actual security boundary. A user typing a non-Penn email must not be able to obtain a session.
 - **Onboarding flow:** Enter email → receive OTP → verify → session created. On first login, optionally collect a display name (single field; can default to the email local-part to stay low-friction). Then land on the feed.
 - **Session persistence:** Long-lived session ("stay logged in") — the user signs in once and remains authenticated for an extended period (use Supabase's refresh-token session; set a long session lifetime). Re-verification only when the session genuinely expires.
+  - *As built:* `@supabase/ssr` session cookies last 400 days, and `proxy.ts` refreshes the session on every request, so a returning user stays signed in on that browser indefinitely. Supabase's session time-box and inactivity timeout must stay **off** (dashboard → Authentication → Sessions). Known limits, accepted: a new device (or an iOS home-screen install, which has its own cookie jar) needs a fresh code; Safari may cap cookies rewritten client-side at 7 days (unverified).
 - **Route protection:** All app routes except the sign-in flow require an authenticated session, enforced server-side (middleware / server components checking the session). Unauthenticated users are redirected to sign-in.
+  - *As built:* central proxy-level redirects are **deferred** at the owner's request. Each protected page (feed, post detail, create post, map, settings) checks the session server-side and redirects to `/signin` itself; RLS returns nothing to signed-out callers regardless.
 
 ---
 
@@ -67,7 +70,7 @@ Behavioral specs only — component/layout choices belong to the agent.
 - Client shows a friendly message if the email isn't `@upenn.edu`, but the server is the enforcing layer.
 - On success, redirect to the feed.
 
-### 5.2 Feed (`/` or `/feed`) — core
+### 5.2 Feed (`/`) — core
 - The default landing surface. A list of active food posts, ranked by the algorithm in §6.
 - Each post card shows: photo (thumbnail), short description, dietary/allergen tags, **servings remaining**, location name/building, time since posted, availability status, comment count.
 - Primary actions on a card: open detail, quick "it's gone" report, quick servings decrement (low-friction tap), open comments.
@@ -93,11 +96,12 @@ Behavioral specs only — component/layout choices belong to the agent.
 - Filter to active posts only.
 
 ### 5.6 Notification settings (`/settings/notifications`) — core (UI), partial delivery
+- **Default: notified about every new post** on campus, with no setup (a user with no preferences row included). This mirrors the group chat it replaces, where everyone saw everything. The preferences below *narrow* that default rather than enable it.
 - User-configurable preferences (all of the following are customizable):
-  - **Radius / distance** from a chosen point (or from current location) within which they want to be notified of new posts.
-  - **Dietary/allergen filters** — only notify for posts matching/avoiding chosen tags.
-  - **Specific buildings/locations** — opt into notifications for chosen buildings.
-  - **Comment/reply notifications** on the user's own posts.
+  - **Radius / distance** from a chosen point within which they want to be notified of new posts. (The map draws the radius around the viewer's live position; the server matches against the saved centre.)
+  - **Dietary/allergen filters** — `{"require": [...], "exclude": [...]}`: notify only for posts carrying every required tag and none of the excluded ones. Applies unconditionally, including under the notify-everything default.
+  - **Specific buildings/locations** — opt into notifications for chosen buildings (case-insensitive match against a post's location label).
+  - **Comment/reply notifications** on the user's own posts (on by default).
 - See §6 and §8 for how delivery degrades gracefully (in-app always; web push where supported).
 
 ### 5.7 Profile / my posts (`/me`) — nice-to-have
@@ -182,7 +186,8 @@ on failure/timeout:
 
 - **In-app notifications always work** (a notifications list / badge, backed by a table, updated via Realtime).
 - **Web push** (via the PWA service worker + Web Push API) is offered where supported. Reliable on Android/desktop Chrome; **degraded on iOS Safari** (requires "Add to Home Screen", delivery unreliable). The settings UI and preference storage are fully built; actual push delivery is best-effort and may be limited on iOS. This limitation is expected for the web MVP and is the main reason a native app is the eventual path (deferred).
-- A post triggers a notification to a user when it matches that user's stored preferences (radius/building match AND dietary filter match). Comment notifications go to the post creator.
+- A post triggers a notification to every user except its poster when it passes their dietary filter AND their location scope: everyone if they've set neither a radius nor buildings, otherwise inside their radius OR at a watched building. Comment notifications go to the post creator (never for their own comments).
+- **As built:** in-app notifications (table + Realtime bell) are done. **Web push is not built yet** — no service worker or subscriptions; `push_subscriptions` and `web_push_enabled` exist unused.
 - Evaluate matches server-side when a post is created (and when a comment is created, for the creator).
 
 ---
@@ -236,9 +241,9 @@ Conventions: UUID primary keys, `timestamptz` for all times, PostGIS `geography(
 ### `notification_preferences`
 - `user_id` uuid PK/FK → profiles.id
 - `radius_meters` int (nullable)
-- `center` geography(Point) (nullable — or use live location)
+- `center` geography(Point) (nullable) — what the server's radius check uses
 - `building_labels` text[] (opt-in buildings)
-- `dietary_filter` jsonb (include/exclude tag rules)
+- `dietary_filter` jsonb — `{"require": [...], "exclude": [...]}`; `{}` matches everything
 - `notify_on_comment` bool default true
 - `web_push_enabled` bool default false
 
@@ -329,11 +334,11 @@ If a task drifts into any of these, **stop and confirm** before proceeding.
 
 ## 11. Open Questions (decide during the build)
 
-- **MapLibre tile provider** for the MVP (which free tile source / style; whether an API key is needed). Pick the simplest free option that works on Vercel.
+- ~~**MapLibre tile provider**~~ — **resolved:** OpenFreeMap (Liberty style), keyless.
 - **OpenRouter vision model selection** (which specific vision-capable model balances cost, latency, and accuracy for food photos). Decide empirically with a few test images.
 - Exact tuning of `GONE_REPORT_THRESHOLD`, `MAX_AGE`, and ranking weights (`w_recency`, `w_distance`, `w_servings`) — start with the stated defaults, adjust after real use.
 - Whether the feed shows a "recently gone" section or simply hides closed posts (nice-to-have).
-- Display-name policy (require a name vs. default to email local-part) — lean toward optional/low-friction.
+- ~~Display-name policy~~ — **resolved:** defaults to the email local-part (set by the `handle_new_user` trigger); no required step.
 - Visual design specifics and final copy.
 
 ---
@@ -349,6 +354,20 @@ If a task drifts into any of these, **stop and confirm** before proceeding.
 7. **AI classifier (secondary, layered on step 4):** server-side OpenRouter call on photo upload that pre-fills the create form; user confirms/edits; graceful fallback to manual on failure (§6.5).
 8. **Notifications:** preferences UI (§5.6), in-app notifications table + Realtime badge/list, server-side match-on-create logic, then best-effort web push (service worker + subscriptions) — knowing iOS is degraded.
 9. **Polish & moderation:** admin delete actions, empty states, mobile-web layout pass, basic anti-abuse (rate-limit gone-reports).
+
+**Status (2026-09-30)** — implementation detail per step lives in `docs/progress.md`.
+
+| Step | Status |
+|---|---|
+| 1 Foundation | Done |
+| 2 Schema & RLS | Done |
+| 3 Auth & onboarding | Done, except central route protection (deferred; pages guard themselves) |
+| 4 Post creation (manual) | Done, incl. photo compression and address/building autofill |
+| 5 Feed, detail, comments, lifecycle | Done |
+| 6 Map | Done |
+| 7 AI classifier | **Not started** |
+| 8 Notifications | In-app done; **web push not started** |
+| 9 Polish & moderation | Done (admin deletes, gone-report rate limit 12/hr, mobile pass) |
 
 > Resist building schema or features for future (native/multi-campus/reputation) phases beyond what's specified here.
 
