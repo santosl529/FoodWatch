@@ -476,5 +476,5 @@ Since 9e the map drew the radius circle around the viewer's live position, but `
 **Notes**
 - Privacy: this stores each user's last-known position. Only they can read it under RLS, but it's visible to the secret key and admins in the dashboard. The owner accepted this.
 - The throttle memory is per device, not per user. If a second account signs in on the same browser within 10 minutes and hasn't moved, its first save is skipped until the next move or interval.
-- `lib/geo/ewkb.ts` has no callers any more.
+- `lib/geo/ewkb.ts` had no callers left and was deleted.
 - ⚠️ Not verified on a phone yet: it needs iOS Safari location enabled (Settings → Privacy & Security → Location Services → Safari Websites).
