@@ -49,7 +49,7 @@ export async function Nav() {
         {user ? (
           <div className="flex items-center gap-1 sm:gap-2">
             <Button asChild size="sm" variant="ghost">
-              <Link href="/feed" aria-label="Feed">
+              <Link href="/" aria-label="Feed">
                 <List className="size-4" />
                 <span className="hidden sm:inline">Feed</span>
               </Link>
