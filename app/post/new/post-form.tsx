@@ -7,6 +7,7 @@ import { Camera, Loader2 } from "lucide-react";
 
 import { createPost } from "@/app/actions/posts";
 import { LocationPicker, type Coords } from "@/components/location-picker";
+import { LocationSearch } from "@/components/location-search";
 import { compressPhoto } from "@/lib/posts/compress-photo";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -194,16 +195,7 @@ export function CreatePostForm({ userId }: { userId: string }) {
           <CardTitle className="text-base">Where is it?</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="locationLabel">Building or room</Label>
-            <Input
-              id="locationLabel"
-              name="locationLabel"
-              required
-              maxLength={120}
-              placeholder="Towne 100"
-            />
-          </div>
+          <LocationSearch onPick={setCoords} />
 
           <input type="hidden" name="latitude" value={coords?.latitude ?? ""} />
           <input type="hidden" name="longitude" value={coords?.longitude ?? ""} />

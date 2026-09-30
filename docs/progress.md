@@ -435,3 +435,19 @@ One test failed after 0010: since every post now notifies every user, "the comme
 
 **Note**
 `0010_notify_everything.sql` was accidentally overwritten in the editor with a single character and restored from this session. It is untracked until committed, so git could not have recovered it — the same near-miss as the stray text in 0007.
+
+### 9f — Location autofill on the create form (done, pending browser check)
+
+**What changed**
+- The free-text "Building or room" input is replaced by `components/location-search.tsx`: search as you type (≥3 chars, 300 ms debounce, in-flight requests aborted). Picking a suggestion locks it as a chip (✕ to change) and moves the map pin, which stays draggable. An optional "Room, floor or details" field is appended to the label as `Name · details`, and its `maxLength` is sized so the result stays inside the server's 120-char limit.
+- `lib/places/`: `types.ts` (shared `PlaceSuggestion`), `penn.ts` (Penn mapping + matcher + merge), `photon.ts` (URL builder + Zod-parsed response mapping), `label.ts`, `search.ts` (merges both; geocoder failure is reported, not thrown).
+- Server action and schema are unchanged: the component still submits `locationLabel`.
+
+**Geocoder: Photon (photon.komoot.io)**
+Keyless and free, and designed for autocomplete. Nominatim's usage policy forbids autocomplete. Results are biased to `CAMPUS_CENTER` and bounded to a Philadelphia bbox. Called straight from the browser, since there's no secret. It's a public best-effort server: the list always ends with "Use what I typed", which locks the text without moving the pin, so an outage degrades rather than blocks.
+
+**Penn colloquial names: `PENN_PLACES` in `lib/places/penn.ts`**
+Starts empty. OSM already has formal names ("John M. Huntsman Hall", "Levine Hall"), so entries are only needed for colloquial ones ("JMHH", "VP") or to override where OSM puts a building. Each entry is `{ name, aliases[], address, coords }`. `name` is what's stored on the post. Penn matches rank above geocoder results, and geocoder results whose name matches a matched place's name/alias are dropped.
+
+**Testing**
+`test/places.test.mjs` has 11 pure unit tests. Node 26 strips TS types on import, so the tests import `lib/places/*.ts` directly. That's why the pure modules use relative, type-only imports and no `@/` aliases (Node can't resolve those). `search.ts` imports `@/lib/map/config` and is deliberately not imported by tests. Node prints a harmless `MODULE_TYPELESS_PACKAGE_JSON` warning for these files.

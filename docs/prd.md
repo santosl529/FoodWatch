@@ -156,6 +156,7 @@ score = w_recency * recency_factor(max(created_at, bumped_at))
 ### 6.4 Location capture
 
 - On post creation, capture the food's location. Preferred: device geolocation (one tap "use my location") with the option to adjust a pin on a MapLibre map and/or pick/enter a building name. Store both coordinates (for the map and distance math) and a human-readable location/building label (for the feed card).
+- **Address / building autofill (built):** the label field searches as you type. Picking a suggestion locks it in as a chip and moves the pin; an optional "room / floor / details" field is appended to the stored label (`Levine Hall · room 101`). Suggestions come from a hand-kept Penn building mapping (colloquial names/aliases → canonical name + coordinates; ranks first) and an OpenStreetMap geocoder (Photon), which already knows formal Penn building names. A "use what I typed" option always remains, so a geocoder outage never blocks posting.
 - Use PostGIS for "posts near me" distance calculations and notification-radius checks.
 
 ### 6.5 AI classifier (photo → fields)
