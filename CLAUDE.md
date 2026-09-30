@@ -25,7 +25,8 @@ npx tsc --noEmit  # typecheck
 app/
   actions/       # server actions (auth.ts, posts.ts, …)
   signin/        # email-OTP sign-in page
-  feed/          # ranked active-food feed (default landing)
+  page.tsx       # ranked active-food feed, served at / (no /feed route)
+  feed-list.tsx  # client feed list (re-fetches with location)
   post/
     new/         # create-post flow (photo required → AI pre-fill → confirm)
     [id]/        # post detail + realtime comments + availability controls
